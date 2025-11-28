@@ -7,6 +7,7 @@ function GroupDetailsScreen({ navigateTo, route }) {
     const [error, setError] = useState(null);
     const [currentUser, setCurrentUser] = useState(null);
 
+    // 1. Load User
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -14,6 +15,7 @@ function GroupDetailsScreen({ navigateTo, route }) {
         }
     }, []);
 
+    // 2. Fetch Group Details
     const fetchGroupDetails = async () => {
         setLoading(true);
         try {
@@ -35,38 +37,44 @@ function GroupDetailsScreen({ navigateTo, route }) {
         }
     };
 
-    // Standard Join/Leave Handlers (Same as before)
-    const handleJoinGroup = async () => { /* ... existing join logic ... */ }; // (Keep your existing join logic here or copy from previous full file if needed for clarity)
-    // For brevity in this update, assuming standard join logic exists. 
-    // If you need the full file again with Join/Leave logic included, let me know!
-    
-    // ADMIN DELETE HANDLER
-    const handleAdminDelete = async () => {
-        if (!window.confirm("ADMIN ACTION: Delete this group? This cannot be undone.")) return;
-
+    // 3. Action Handlers
+    const handleJoinGroup = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/admin/${groupId}`, {
+            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/${groupId}/join`, {
+                method: 'POST',
+                headers: { 'x-auth-token': token }
+            });
+            if (!response.ok) throw new Error("Failed to join");
+            alert("Joined successfully!");
+            fetchGroupDetails(); 
+        } catch (e) { alert(e.message); }
+    };
+
+    const handleLeaveGroup = async () => {
+        if (!window.confirm("Leave this group?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/${groupId}/leave`, {
+                method: 'POST',
+                headers: { 'x-auth-token': token }
+            });
+            if (!response.ok) throw new Error("Failed to leave");
+            alert("Left group.");
+            navigateTo('Dashboard');
+        } catch (e) { alert(e.message); }
+    };
+
+    const handleDeleteGroup = async () => {
+        if (!window.confirm("Delete this group permanently?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/${groupId}`, {
                 method: 'DELETE',
                 headers: { 'x-auth-token': token }
             });
-
-            if (!response.ok) throw new Error("Admin delete failed");
-
-            alert("Group deleted by Admin Authority.");
-            navigateTo('Dashboard');
-
-        } catch (e) {
-            alert(e.message);
-        }
-    };
-
-    // Owner Delete Handler
-    const handleDeleteGroup = async () => {
-        if (!window.confirm("Delete your group?")) return;
-        try {
-            const token = localStorage.getItem('token');
-            await fetch(`https://tfg-backend-x926.onrender.com/api/groups/${groupId}`, { method: 'DELETE', headers: { 'x-auth-token': token } });
+            if (!response.ok) throw new Error("Failed to delete");
+            alert("Group deleted.");
             navigateTo('Dashboard');
         } catch (e) { alert(e.message); }
     };
@@ -76,39 +84,67 @@ function GroupDetailsScreen({ navigateTo, route }) {
     }, [groupId]);
 
     if (loading) return <p style={{textAlign:'center', marginTop:'20px'}}>Loading...</p>;
-    if (!group) return null;
+    if (!group) return <p style={{textAlign:'center'}}>Group not found.</p>;
 
-    const isMember = group.members?.some(m => m.user_id === currentUser?.id);
-    const isCreator = group.created_by === currentUser?.id;
-    const isAdmin = currentUser?.role === 'admin'; // Check for Admin Role
+    // 4. Robust Membership Check
+    // We compare strings to ensure no type mismatch (e.g. number vs string)
+    const isMember = group.members?.some(m => String(m.user_id) === String(currentUser?.id));
+    const isCreator = String(group.created_by) === String(currentUser?.id);
+    const isAdmin = currentUser?.role === 'admin';
 
     return (
         <div className="form-container" style={{maxWidth: '800px', textAlign: 'left'}}>
             <button onClick={() => navigateTo('Dashboard')} className="btn" style={{marginBottom: '20px'}}>&larr; Back</button>
 
-            <h1 style={{borderBottom: '2px solid var(--color-primary)', paddingBottom: '10px'}}>{group.title}</h1>
+            <h1 style={{borderBottom: '2px solid var(--color-primary)', paddingBottom: '10px'}}>
+                {group.title}
+                {isAdmin && <span style={{marginLeft: '10px', background:'red', color:'white', padding:'4px 8px', fontSize:'12px', borderRadius:'4px', verticalAlign:'middle'}}>ADMIN</span>}
+            </h1>
             <p style={{fontSize: '1.1em'}}>{group.description}</p>
-            
-            {/* Admin Badge */}
-            {isAdmin && <span style={{background:'red', color:'white', padding:'2px 6px', fontSize:'10px', borderRadius:'4px', verticalAlign:'middle'}}>ADMIN MODE</span>}
+            <p><strong>Created By:</strong> {group.creator_name || 'Unknown'}</p>
 
             <div className="card">
-                <h3>Members</h3>
+                <h3>Members ({group.members?.length || 0})</h3>
                 <ul>
-                    {group.members?.map(m => <li key={m.user_id}>{m.full_name}</li>)}
+                    {group.members?.map(m => (
+                        <li key={m.user_id} style={{padding: '5px 0', borderBottom: '1px solid #eee'}}>
+                            {m.full_name} 
+                            {String(m.user_id) === String(group.created_by) && " (Creator)"}
+                        </li>
+                    ))}
                 </ul>
             </div>
 
             <div style={{marginTop: '30px', textAlign: 'center'}}>
-                {/* Standard Buttons */}
-                {isCreator ? (
-                    <button onClick={handleDeleteGroup} className="btn btn-danger">Delete My Group</button>
-                ) : (
-                    isAdmin && (
-                        <button onClick={handleAdminDelete} className="btn btn-danger" style={{backgroundColor: 'darkred'}}>
-                            ⚠️ Admin Force Delete
+                {/* 5. Conditional Buttons */}
+                {isMember ? (
+                    <>
+                        <button 
+                            className="btn btn-secondary" 
+                            style={{marginRight: '15px'}} 
+                            onClick={() => navigateTo('GroupChat', { groupId: group.group_id })}
+                        >
+                            Go to Group Chat
                         </button>
-                    )
+                        <button onClick={handleLeaveGroup} className="btn btn-danger">
+                            Leave Group
+                        </button>
+                    </>
+                ) : (
+                    <button onClick={handleJoinGroup} className="btn btn-primary">
+                        Join Group
+                    </button>
+                )}
+
+                {/* Delete Button for Creator/Admin */}
+                {(isCreator || isAdmin) && (
+                    <button 
+                        onClick={handleDeleteGroup} 
+                        className="btn btn-danger" 
+                        style={{marginTop: '20px', display: 'block', marginLeft: 'auto', marginRight: 'auto'}}
+                    >
+                        {isCreator ? "Delete My Group" : "⚠️ Admin Force Delete"}
+                    </button>
                 )}
             </div>
         </div>
