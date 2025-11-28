@@ -1,17 +1,15 @@
-// src/screens/SignupScreen.js
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from '../firebaseConfig'; // Import our configured auth instance
 
 function SignupScreen({ navigateTo }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState(''); // New Field for Enterprise
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const handleSignup = async () => {
-        if (!email || !password) {
-            setError("Please enter both email and password.");
+        if (!email || !password || !fullName) {
+            setError("Please fill in all fields.");
             return;
         }
 
@@ -19,19 +17,31 @@ function SignupScreen({ navigateTo }) {
         setLoading(true);
 
         try {
-            // Firebase API call to create the user
-            await createUserWithEmailAndPassword(
-                auth,
-                email,
-                password
-            );
+            // Call the Enterprise API
+            const response = await fetch('http://localhost:5000/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: password,
+                    full_name: fullName
+                }),
+            });
 
-            // Success! Redirect user to the profile screen (Week 1 task)
-            console.log("Signup Successful! Redirecting to Complete Profile.");
-            navigateTo('CompleteProfile'); // Function passed from App.js
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Registration failed');
+            }
+
+            // Success!
+            console.log("Enterprise Registration Successful:", data);
+            alert("Account created! Please log in.");
+            navigateTo('Login');
 
         } catch (e) {
-            // Handle Firebase-specific errors
             console.error("Signup error:", e.message);
             setError(e.message);
         } finally {
@@ -40,39 +50,47 @@ function SignupScreen({ navigateTo }) {
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '400px', margin: '0 auto', textAlign: 'center' }}>
-            <h2>Create Your Account</h2>
+        <div className="form-container">
+            <h2>Create Enterprise Account</h2>
 
+            <input
+                type="text"
+                placeholder="Full Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="input-field"
+            />
             <input
                 type="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={{ padding: '10px', margin: '10px 0', width: '100%' }}
+                className="input-field"
             />
             <input
                 type="password"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{ padding: '10px', margin: '10px 0', width: '100%' }}
+                className="input-field"
             />
 
-            {error && <p style={{ color: 'red' }}>{error}</p>}
+            {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
 
             <button
                 onClick={handleSignup}
                 disabled={loading}
-                style={{ padding: '10px 20px', width: '100%', cursor: 'pointer' }}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '10px' }}
             >
-                {loading ? "Signing Up..." : "Sign Up"}
+                {loading ? "Registering..." : "Sign Up"}
             </button>
 
-            <p style={{ marginTop: '20px' }}>
+            <p style={{ marginTop: '20px', textAlign: 'center' }}>
                 Already have an account? 
                 <button 
                     onClick={() => navigateTo('Login')} 
-                    style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer' }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
                 >
                     Log In
                 </button>

@@ -1,79 +1,91 @@
-// src/screens/MatchScreen.js
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebaseConfig';
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-import { getMatchScores } from '../utils/matchingLogic'; // <-- Import logic
 
 function MatchScreen({ navigateTo }) {
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const currentUser = auth.currentUser;
 
     useEffect(() => {
-        const runMatching = async () => {
-            if (!currentUser) {
-                setError("User not logged in.");
-                setLoading(false);
-                return;
-            }
-
+        const fetchMatches = async () => {
+            setLoading(true);
             try {
-                // 1. Fetch current user's profile
-                const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-                if (!userDoc.exists()) {
-                    setError("Complete your profile first!");
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    setError("Please log in to see matches.");
                     setLoading(false);
                     return;
                 }
-                const currentUserProfile = { id: currentUser.uid, ...userDoc.data() };
 
-                // 2. Fetch all other user profiles
-                const usersSnapshot = await getDocs(collection(db, "users"));
-                const allCandidateProfiles = usersSnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }));
+                // Call the Enterprise API
+                const response = await fetch('https://tfg-backend-x926.onrender.com/api/matches', {
+                    headers: { 'x-auth-token': token }
+                });
 
-                // 3. Run the matching algorithm
-                const calculatedScores = getMatchScores(currentUserProfile, allCandidateProfiles);
-                
-                setMatches(calculatedScores);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Failed to fetch matches');
+                }
+
+                setMatches(data);
 
             } catch (e) {
                 console.error("Matching Error:", e);
-                setError("Failed to run matching. Check console.");
+                setError(e.message);
             } finally {
                 setLoading(false);
             }
         };
 
-        runMatching();
-    }, [currentUser]);
+        fetchMatches();
+    }, []);
 
+    const handleInvite = (name) => {
+        alert(`Invitation sent to ${name}!`);
+    };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-            <h2>🤝 Teammate Recommendations</h2>
-            <p>We found {matches.length} potential teammates based on your profile:</p>
+        <div className="form-container" style={{maxWidth: '800px'}}>
+            <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                <button onClick={() => navigateTo('Dashboard')} className="btn" style={{marginRight: '15px'}}>
+                    &larr; Back
+                </button>
+                <h2>🤝 Teammate Recommendations</h2>
+            </div>
 
-            <button onClick={() => navigateTo('Dashboard')} style={{ marginBottom: '20px', cursor: 'pointer' }}>
-                &larr; Back to Dashboard
-            </button>
+            {loading && <p style={{textAlign: 'center'}}>Calculating AI matches...</p>}
+            {error && <p style={{color: 'red', textAlign: 'center'}}>{error}</p>}
             
-            {loading && <p>Calculating match scores...</p>}
-            {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-            
-            {matches.map((match, index) => (
-                <div key={match.candidateId} style={{ border: `2px solid #007bff`, padding: '15px', marginBottom: '10px', borderRadius: '5px' }}>
+            {!loading && matches.length === 0 && !error && (
+                <p style={{textAlign: 'center'}}>No matches found yet. Try updating your profile skills/interests!</p>
+            )}
+
+            {matches.map((match) => (
+                <div key={match.candidateId} className="card" style={{borderLeft: '5px solid var(--color-primary)', cursor: 'default'}}>
                     
-                    <h3 style={{ color: '#007bff' }}>Match Score: {Math.round(match.totalScore * 100)}%</h3>
-                    <p>Candidate User ID: {match.candidateId.substring(0, 8)}...</p>
-                    <p style={{ fontSize: '0.9em', color: '#666' }}>
-                        (Contribution: Skill ({Math.round(match.details.skillScore * 100)}%), 
-                        Interest ({Math.round(match.details.interestScore * 100)}%), 
-                        Availability ({Math.round(match.details.availabilityScore * 100)}%))
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <div>
+                            <h3 style={{color: 'var(--color-primary)', margin: '0 0 5px 0'}}>
+                                {match.fullName} 
+                            </h3>
+                            <span style={{backgroundColor: '#e3f2fd', padding: '2px 8px', borderRadius: '12px', fontSize: '0.85em', color: '#004d99', fontWeight: 'bold'}}>
+                                {Math.round(match.totalScore * 100)}% Match
+                            </span>
+                        </div>
+                        <button 
+                            onClick={() => handleInvite(match.fullName)}
+                            className="btn btn-primary"
+                            style={{fontSize: '0.9em', padding: '8px 15px'}}
+                        >
+                            Connect
+                        </button>
+                    </div>
+
+                    <p style={{fontSize: '0.9em', color: '#666', marginTop: '15px'}}>
+                        <strong>Why?</strong> Skill Overlap: {Math.round(match.details.skillScore * 100)}% • 
+                        Interest Match: {Math.round(match.details.interestScore * 100)}% • 
+                        Availability: {Math.round(match.details.availabilityScore * 100)}%
                     </p>
-                    
-                    {/* Placeholder for future "Invite to Group" feature */}
                 </div>
             ))}
         </div>

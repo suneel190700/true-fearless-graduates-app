@@ -1,7 +1,4 @@
-// src/screens/LoginScreen.js
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from '../firebaseConfig'; // Import our configured auth instance
 
 function LoginScreen({ navigateTo }) {
     const [email, setEmail] = useState('');
@@ -19,19 +16,35 @@ function LoginScreen({ navigateTo }) {
         setLoading(true);
 
         try {
-            // Firebase API call to sign the user in
-            await signInWithEmailAndPassword(
-                auth,
-                email,
-                password
-            );
+            // Call the Enterprise API
+            const response = await fetch('https://tfg-backend-x926.onrender.com/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: password
+                }),
+            });
 
-            // Success! Redirect user to the dashboard or profile check
-            console.log("Login Successful! Redirecting to Dashboard.");
-            navigateTo('Dashboard'); // Function passed from App.js
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Login failed');
+            }
+
+            // Success! Save the Token
+            console.log("Login Successful:", data);
+            
+            // Store the token and user info in browser storage
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+
+            // Force a page reload to update App.js state (Simple method for now)
+            window.location.reload(); 
 
         } catch (e) {
-            // Handle Firebase-specific errors
             console.error("Login error:", e.message);
             setError(e.message);
         } finally {
@@ -40,39 +53,40 @@ function LoginScreen({ navigateTo }) {
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '400px', margin: '0 auto', textAlign: 'center' }}>
-            <h2>Log In to Your Account</h2>
+        <div className="form-container">
+            <h2>Enterprise Login</h2>
 
             <input
                 type="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={{ padding: '10px', margin: '10px 0', width: '100%' }}
+                className="input-field"
             />
             <input
                 type="password"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{ padding: '10px', margin: '10px 0', width: '100%' }}
+                className="input-field"
             />
 
-            {error && <p style={{ color: 'red' }}>{error}</p>}
+            {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
 
             <button
                 onClick={handleLogin}
                 disabled={loading}
-                style={{ padding: '10px 20px', width: '100%', cursor: 'pointer' }}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '10px' }}
             >
                 {loading ? "Logging In..." : "Log In"}
             </button>
 
-            <p style={{ marginTop: '20px' }}>
+            <p style={{ marginTop: '20px', textAlign: 'center' }}>
                 Don't have an account? 
                 <button 
                     onClick={() => navigateTo('Signup')} 
-                    style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer' }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
                 >
                     Sign Up
                 </button>

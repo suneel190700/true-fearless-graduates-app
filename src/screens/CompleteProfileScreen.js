@@ -1,63 +1,99 @@
-// src/screens/CompleteProfileScreen.js
-import React, { useState } from 'react';
-import { db } from '../firebaseConfig'; // Import Firestore database
-import { doc, setDoc } from "firebase/firestore"; 
-import { auth } from '../firebaseConfig'; // Import Auth to get the user ID
+import React, { useState, useEffect } from 'react';
 
 function CompleteProfileScreen({ navigateTo }) {
-    // 1. State for data collection
-    const [skills, setSkills] = useState(''); // e.g., "React, Python, Figma"
-    const [interests, setInterests] = useState(''); // e.g., "AI, Fintech, Gaming"
-    const [availabilityHours, setAvailabilityHours] = useState(''); // e.g., "10"
+    const [skills, setSkills] = useState('');
+    const [interests, setInterests] = useState('');
+    const [availabilityHours, setAvailabilityHours] = useState('');
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
 
-    // 2. Data processing and submission
+    // 1. Fetch Existing Profile (Pre-fill data for Editing)
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    // If no token, redirect to login (or handle appropriately)
+                    return;
+                }
+
+                const response = await fetch('https://tfg-backend-x926.onrender.com/api/users/profile', {
+                    headers: { 'x-auth-token': token }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Pre-fill fields if data exists
+                    if (data.skills) setSkills(Array.isArray(data.skills) ? data.skills.join(', ') : data.skills);
+                    if (data.interests) setInterests(Array.isArray(data.interests) ? data.interests.join(', ') : data.interests);
+                    if (data.availability_hours) setAvailabilityHours(data.availability_hours);
+                    
+                    // If skills exist, we are in editing mode
+                    if (data.skills && data.skills.length > 0) setIsEditing(true);
+                }
+            } catch (e) {
+                console.error("Error loading profile:", e);
+            }
+        };
+        fetchProfile();
+    }, []);
+
+    // 2. Handle Submit (Update via API)
     const handleProfileSubmit = async () => {
-        const user = auth.currentUser;
-        if (!user) {
-            setError("User not authenticated. Please log in again.");
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setError("You must be logged in.");
             return;
         }
-
+        
         if (!skills || !interests || !availabilityHours) {
-            setError("All fields are required to complete your profile.");
+            setError("All fields are required.");
             return;
         }
 
         setError(null);
         setLoading(true);
         
-        // Prepare data for Firestore: converting strings to arrays/numbers
-        const profileData = {
-            // Split strings into arrays for easy matching later
-            skills: skills.split(',').map(s => s.trim()), 
-            interests: interests.split(',').map(i => i.trim()),
-            availabilityHours: parseInt(availabilityHours),
-            createdAt: new Date().toISOString()
-        };
+        // Convert comma-separated strings to arrays for PostgreSQL
+        const skillsArray = skills.split(',').map(s => s.trim()).filter(s => s);
+        const interestsArray = interests.split(',').map(i => i.trim()).filter(i => i);
 
         try {
-            // 3. Save profile data to the Firestore 'users' collection 
-            // The document ID is set to the user's unique Firebase UID
-            await setDoc(doc(db, "users", user.uid), profileData, { merge: true });
+            const response = await fetch('https://tfg-backend-x926.onrender.com/api/users/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token
+                },
+                body: JSON.stringify({
+                    skills: skillsArray,
+                    interests: interestsArray,
+                    availabilityHours: parseInt(availabilityHours)
+                })
+            });
 
-            console.log("Profile created successfully for:", user.uid);
-            
-            // 4. Success! Redirect to the Dashboard
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to update profile');
+            }
+
+            alert("Profile saved successfully!");
             navigateTo('Dashboard'); 
 
         } catch (e) {
-            console.error("Profile submission error:", e.message);
-            setError("Error saving profile. Check console for details.");
+            console.error("Profile Error:", e);
+            setError(e.message);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto', textAlign: 'left', border: '1px solid #ccc', borderRadius: '8px' }}>
-            <h2>Complete Your Profile</h2>
+        <div className="form-container" style={{maxWidth: '500px'}}>
+            <h2>{isEditing ? "Edit Your Profile" : "Complete Your Profile"}</h2>
             <p>Tell us about your skills and availability so we can find your ideal teammates!</p>
             
             <label>Skills (Comma separated: e.g., React, Python, Figma)</label>
@@ -65,7 +101,8 @@ function CompleteProfileScreen({ navigateTo }) {
                 type="text"
                 value={skills}
                 onChange={(e) => setSkills(e.target.value)}
-                style={{ padding: '10px', margin: '5px 0 15px 0', width: '100%', boxSizing: 'border-box' }}
+                className="input-field"
+                placeholder="React, Node.js, Design"
             />
             
             <label>Interests (Comma separated: e.g., AI, Fintech, Gaming)</label>
@@ -73,7 +110,8 @@ function CompleteProfileScreen({ navigateTo }) {
                 type="text"
                 value={interests}
                 onChange={(e) => setInterests(e.target.value)}
-                style={{ padding: '10px', margin: '5px 0 15px 0', width: '100%', boxSizing: 'border-box' }}
+                className="input-field"
+                placeholder="AI, Web3, Startups"
             />
             
             <label>Weekly Availability (Hours)</label>
@@ -83,7 +121,8 @@ function CompleteProfileScreen({ navigateTo }) {
                 onChange={(e) => setAvailabilityHours(e.target.value)}
                 min="1"
                 max="50"
-                style={{ padding: '10px', margin: '5px 0 15px 0', width: '100%', boxSizing: 'border-box' }}
+                className="input-field"
+                placeholder="10"
             />
             
             {error && <p style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
@@ -91,9 +130,18 @@ function CompleteProfileScreen({ navigateTo }) {
             <button
                 onClick={handleProfileSubmit}
                 disabled={loading}
-                style={{ padding: '10px 20px', width: '100%', cursor: 'pointer' }}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '15px' }}
             >
-                {loading ? "Saving Profile..." : "Complete & Go to Dashboard"}
+                {loading ? "Saving..." : "Save Profile"}
+            </button>
+            
+            <button
+                onClick={() => navigateTo('Dashboard')}
+                className="btn"
+                style={{ width: '100%', marginTop: '10px', backgroundColor: '#e0e0e0', color: 'black' }}
+            >
+                Cancel
             </button>
         </div>
     );
