@@ -1,7 +1,4 @@
-// src/screens/ProfileViewerScreen.js
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebaseConfig';
-import { doc, getDoc } from "firebase/firestore"; 
 
 function ProfileViewerScreen({ navigateTo, route }) {
     const candidateId = route.params?.candidateId;
@@ -18,11 +15,15 @@ function ProfileViewerScreen({ navigateTo, route }) {
 
         const fetchCandidateProfile = async () => {
             try {
-                const docRef = doc(db, "users", candidateId);
-                const docSnap = await getDoc(docRef);
+                const token = localStorage.getItem('token');
+                // FIX: Use Enterprise API (Render URL)
+                const response = await fetch(`https://tfg-backend-x926.onrender.com/api/users/${candidateId}`, {
+                    headers: { 'x-auth-token': token }
+                });
 
-                if (docSnap.exists()) {
-                    setProfile(docSnap.data());
+                if (response.ok) {
+                    const data = await response.json();
+                    setProfile(data);
                 } else {
                     setError("Profile data unavailable.");
                 }
@@ -49,18 +50,18 @@ function ProfileViewerScreen({ navigateTo, route }) {
             
             <div className="card">
                 <h2>Candidate Profile</h2>
-                <p><strong>User ID:</strong> {candidateId}</p>
+                <p><strong>Name:</strong> {profile.full_name}</p>
+                <p><strong>Email:</strong> {profile.email}</p>
                 
                 <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '5px', marginTop: '20px' }}>Skills</h3>
-                <p>{profile.skills ? profile.skills.join(', ') : 'N/A'}</p>
+                <p>{profile.skills ? (Array.isArray(profile.skills) ? profile.skills.join(', ') : profile.skills) : 'N/A'}</p>
                 
                 <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '5px', marginTop: '20px' }}>Interests</h3>
-                <p>{profile.interests ? profile.interests.join(', ') : 'N/A'}</p>
+                <p>{profile.interests ? (Array.isArray(profile.interests) ? profile.interests.join(', ') : profile.interests) : 'N/A'}</p>
                 
                 <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '5px', marginTop: '20px' }}>Availability</h3>
-                <p>{profile.availabilityHours || 'N/A'} hours per week</p>
+                <p>{profile.availability_hours || 'N/A'} hours per week</p>
             </div>
-            
         </div>
     );
 }
