@@ -45,7 +45,10 @@ function GroupDetailsScreen({ navigateTo, route }) {
                 method: 'POST',
                 headers: { 'x-auth-token': token }
             });
-            if (!response.ok) throw new Error("Failed to join");
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message);
+            }
             alert("Joined successfully!");
             fetchGroupDetails(); 
         } catch (e) { alert(e.message); }
@@ -65,27 +68,47 @@ function GroupDetailsScreen({ navigateTo, route }) {
         } catch (e) { alert(e.message); }
     };
 
-// ADMIN DELETE HANDLER
-const handleAdminDelete = async () => {
-    if (!window.confirm("ADMIN ACTION: Delete this group? This cannot be undone.")) return;
+    // --- ADDED MISSING FUNCTION HERE ---
+    const handleDeleteGroup = async () => {
+        if (!window.confirm("Delete your group permanently?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/${groupId}`, {
+                method: 'DELETE',
+                headers: { 'x-auth-token': token }
+            });
+            
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || "Failed to delete");
+            }
+            
+            alert("Group deleted.");
+            navigateTo('Dashboard');
+        } catch (e) { alert(e.message); }
+    };
 
-    try {
-        const token = localStorage.getItem('token');
-        // Ensure this URL matches the admin route
-        const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/admin/${groupId}`, {
-            method: 'DELETE',
-            headers: { 'x-auth-token': token }
-        });
+    // ADMIN DELETE HANDLER
+    const handleAdminDelete = async () => {
+        if (!window.confirm("ADMIN ACTION: Delete this group? This cannot be undone.")) return;
 
-        if (!response.ok) throw new Error("Admin delete failed");
+        try {
+            const token = localStorage.getItem('token');
+            // Ensure this endpoint matches your backend route '/api/groups/admin/:id'
+            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/admin/${groupId}`, {
+                method: 'DELETE',
+                headers: { 'x-auth-token': token }
+            });
 
-        alert("Group deleted by Admin Authority.");
-        navigateTo('Dashboard');
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || "Admin delete failed");
+            }
 
-    } catch (e) {
-        alert(e.message);
-    }
-};
+            alert("Group force-deleted by Admin.");
+            navigateTo('Dashboard');
+        } catch (e) { alert(e.message); }
+    };
 
     useEffect(() => {
         if (groupId) fetchGroupDetails();
@@ -95,7 +118,6 @@ const handleAdminDelete = async () => {
     if (!group) return <p style={{textAlign:'center'}}>Group not found.</p>;
 
     // 4. Robust Membership Check
-    // We compare strings to ensure no type mismatch (e.g. number vs string)
     const isMember = group.members?.some(m => String(m.user_id) === String(currentUser?.id));
     const isCreator = String(group.created_by) === String(currentUser?.id);
     const isAdmin = currentUser?.role === 'admin';
@@ -144,14 +166,25 @@ const handleAdminDelete = async () => {
                     </button>
                 )}
 
-                {/* Delete Button for Creator/Admin */}
-                {(isCreator || isAdmin) && (
+                {/* Delete Button for Creator */}
+                {isCreator && (
                     <button 
                         onClick={handleDeleteGroup} 
                         className="btn btn-danger" 
                         style={{marginTop: '20px', display: 'block', marginLeft: 'auto', marginRight: 'auto'}}
                     >
-                        {isCreator ? "Delete My Group" : "⚠️ Admin Force Delete"}
+                        Delete My Group
+                    </button>
+                )}
+
+                {/* Delete Button for Admin (if NOT creator) */}
+                {isAdmin && !isCreator && (
+                     <button 
+                        onClick={handleAdminDelete} 
+                        className="btn btn-danger" 
+                        style={{marginTop: '20px', display: 'block', marginLeft: 'auto', marginRight: 'auto', backgroundColor: 'darkred'}}
+                    >
+                        ⚠️ Admin Force Delete
                     </button>
                 )}
             </div>
