@@ -65,19 +65,27 @@ function GroupDetailsScreen({ navigateTo, route }) {
         } catch (e) { alert(e.message); }
     };
 
-    const handleDeleteGroup = async () => {
-        if (!window.confirm("Delete this group permanently?")) return;
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/${groupId}`, {
-                method: 'DELETE',
-                headers: { 'x-auth-token': token }
-            });
-            if (!response.ok) throw new Error("Failed to delete");
-            alert("Group deleted.");
-            navigateTo('Dashboard');
-        } catch (e) { alert(e.message); }
-    };
+// ADMIN DELETE HANDLER
+const handleAdminDelete = async () => {
+    if (!window.confirm("ADMIN ACTION: Delete this group? This cannot be undone.")) return;
+
+    try {
+        const token = localStorage.getItem('token');
+        // Ensure this URL matches the admin route
+        const response = await fetch(`https://tfg-backend-x926.onrender.com/api/groups/admin/${groupId}`, {
+            method: 'DELETE',
+            headers: { 'x-auth-token': token }
+        });
+
+        if (!response.ok) throw new Error("Admin delete failed");
+
+        alert("Group deleted by Admin Authority.");
+        navigateTo('Dashboard');
+
+    } catch (e) {
+        alert(e.message);
+    }
+};
 
     useEffect(() => {
         if (groupId) fetchGroupDetails();
