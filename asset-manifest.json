@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/true-fearless-graduates-app/static/css/main.2ffde6ff.css",
-    "main.js": "/true-fearless-graduates-app/static/js/main.e718f1fb.js",
+    "main.js": "/true-fearless-graduates-app/static/js/main.f622137f.js",
     "static/js/453.84af0319.chunk.js": "/true-fearless-graduates-app/static/js/453.84af0319.chunk.js",
     "index.html": "/true-fearless-graduates-app/index.html",
     "main.2ffde6ff.css.map": "/true-fearless-graduates-app/static/css/main.2ffde6ff.css.map",
-    "main.e718f1fb.js.map": "/true-fearless-graduates-app/static/js/main.e718f1fb.js.map",
+    "main.f622137f.js.map": "/true-fearless-graduates-app/static/js/main.f622137f.js.map",
     "453.84af0319.chunk.js.map": "/true-fearless-graduates-app/static/js/453.84af0319.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.2ffde6ff.css",
-    "static/js/main.e718f1fb.js"
+    "static/js/main.f622137f.js"
   ]
 }
