@@ -6,6 +6,9 @@ function DashboardScreen({ navigateTo }) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    
+    // NEW: State for Search
+    const [searchTerm, setSearchTerm] = useState('');
 
     // 1. Fetch Groups from Node.js API (PostgreSQL)
     const fetchGroups = async () => {
@@ -61,6 +64,13 @@ function DashboardScreen({ navigateTo }) {
         fetchGroups();
     }, []);
 
+    // NEW: Filtering Logic
+    // This filters the groups array based on the Title OR Description matching the search term
+    const filteredGroups = groups.filter(group => 
+        group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        group.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     const renderGroupItem = (group) => (
         <div 
             key={group.id} 
@@ -80,7 +90,7 @@ function DashboardScreen({ navigateTo }) {
             <h2>Enterprise Dashboard</h2>
             
             {/* Header with action buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                         onClick={() => navigateTo('CreateGroup')}
@@ -89,7 +99,6 @@ function DashboardScreen({ navigateTo }) {
                         + Start Idea Group
                     </button>
                     
-                    {/* Find Teammates Button */}
                     <button
                         onClick={() => navigateTo('MatchScreen')}
                         className="btn btn-secondary"
@@ -97,7 +106,6 @@ function DashboardScreen({ navigateTo }) {
                         🔍 Find Teammates
                     </button>
                     
-                    {/* Edit Profile Button */}
                     <button
                         onClick={() => navigateTo('CompleteProfile')}
                         className="btn"
@@ -115,16 +123,30 @@ function DashboardScreen({ navigateTo }) {
                 </button>
             </div>
             
+            {/* NEW: Search Bar Area */}
+            <div style={{ marginBottom: '20px' }}>
+                <input 
+                    type="text" 
+                    placeholder="🔍 Search projects by title or keywords..." 
+                    className="input-field"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+            </div>
+            
             <div style={{ borderTop: '1px solid #eee', paddingTop: '20px' }}>
-                <h3>Active Projects ({groups.length})</h3>
+                <h3>Active Projects ({filteredGroups.length})</h3>
                 {loading && <p>Loading projects from SQL...</p>}
                 {error && <p style={{ color: 'var(--color-danger)' }}>Error: {error}</p>}
                 
-                {!loading && groups.length === 0 && !error && (
-                    <p>No groups found. Be the first to create one!</p>
+                {!loading && filteredGroups.length === 0 && !error && (
+                    <p style={{ textAlign: 'center', color: '#666', marginTop: '20px' }}>
+                        {searchTerm ? "No projects match your search." : "No groups found. Be the first to create one!"}
+                    </p>
                 )}
                 
-                {groups.map(renderGroupItem)}
+                {/* Render the FILTERED list of groups */}
+                {filteredGroups.map(renderGroupItem)}
             </div>
         </div>
     );
