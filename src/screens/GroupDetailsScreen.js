@@ -159,6 +159,13 @@ function GroupDetailsScreen({ navigateTo, route }) {
                         <button onClick={handleLeaveGroup} className="btn btn-danger">
                             Leave Group
                         </button>
+                        <button 
+    className="btn" 
+    style={{marginRight: '15px', backgroundColor: '#17a2b8', color: 'white'}} 
+    onClick={() => navigateTo('GroupTasks', { groupId: group.group_id })}
+>
+    📋 Tasks
+</button>
                     </>
                 ) : (
                     <button onClick={handleJoinGroup} className="btn btn-primary">
