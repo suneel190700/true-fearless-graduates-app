@@ -12,6 +12,9 @@ import MatchScreen from './screens/MatchScreen';
 import ProfileViewerScreen from './screens/ProfileViewerScreen'; 
 
 import GroupTasksScreen from './screens/GroupTasksScreen'; // <--- IMPORT THIS
+import AnalyticsScreen from './screens/AnalyticsScreen'; // <--- IMPORT THIS
+
+
 
 const LoadingScreen = () => <h2 style={{ textAlign: 'center', marginTop: '50px' }}>Loading... Checking Enterprise Session</h2>;
 
@@ -73,6 +76,9 @@ function App() {
       break;
     case 'ProfileViewer':
       ScreenComponent = ProfileViewerScreen;
+      break;
+    case 'Analytics': // <--- ADD THIS
+      ScreenComponent = AnalyticsScreen;
       break;
     case 'Signup':
     default:

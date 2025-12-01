@@ -159,6 +159,8 @@ function GroupDetailsScreen({ navigateTo, route }) {
                         <button onClick={handleLeaveGroup} className="btn btn-danger">
                             Leave Group
                         </button>
+
+                        
                         <button 
     className="btn" 
     style={{marginRight: '15px', backgroundColor: '#17a2b8', color: 'white'}} 

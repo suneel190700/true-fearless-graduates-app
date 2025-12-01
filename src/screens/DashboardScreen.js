@@ -6,45 +6,37 @@ function DashboardScreen({ navigateTo }) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    
-    // NEW: State for Search
     const [searchTerm, setSearchTerm] = useState('');
+    const [user, setUser] = useState(null);
 
-    // 1. Fetch Groups from Node.js API (PostgreSQL)
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) setUser(JSON.parse(storedUser));
+        fetchGroups();
+    }, []);
+
     const fetchGroups = async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            if (!token) {
-                throw new Error("No session token found. Please log in.");
-            }
+            if (!token) throw new Error("No session token found. Please log in.");
 
             const response = await fetch('https://tfg-backend-x926.onrender.com/api/groups', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token
-                }
+                headers: { 'x-auth-token': token }
             });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to fetch groups');
+            if (response.ok) {
+                const data = await response.json();
+                const mappedGroups = data.map(g => ({
+                    id: g.group_id,
+                    title: g.title,
+                    description: g.description,
+                    createdAt: g.created_at
+                }));
+                setGroups(mappedGroups);
+            } else {
+                throw new Error('Failed to fetch groups');
             }
-
-            // Map PostgreSQL snake_case to camelCase for UI
-            const mappedGroups = data.map(g => ({
-                id: g.group_id,
-                title: g.title,
-                description: g.description,
-                members: [], // Member count handled via SQL query in future optimization
-                createdBy: g.created_by,
-                createdAt: g.created_at
-            }));
-
-            setGroups(mappedGroups);
-
         } catch (e) {
             console.error("API Error:", e);
             setError(e.message);
@@ -54,100 +46,89 @@ function DashboardScreen({ navigateTo }) {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        signOut(auth).catch(e => console.log(e));
+        localStorage.clear();
+        signOut(auth).catch(console.error);
         window.location.reload(); 
     };
 
-    useEffect(() => {
-        fetchGroups();
-    }, []);
-
-    // NEW: Filtering Logic
-    // This filters the groups array based on the Title OR Description matching the search term
     const filteredGroups = groups.filter(group => 
         group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const renderGroupItem = (group) => (
-        <div 
-            key={group.id} 
-            className="card" 
-            onClick={() => navigateTo('GroupDetails', { groupId: group.id })}
-        >
-            <h3>{group.title}</h3>
-            <p>{group.description}</p>
-            <p style={{ fontSize: '0.9em', color: '#666' }}>
-                **Created:** {new Date(group.createdAt).toLocaleDateString()}
-            </p>
-        </div>
-    );
-
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-            <h2>Enterprise Dashboard</h2>
-            
-            {/* Header with action buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button
-                        onClick={() => navigateTo('CreateGroup')}
-                        className="btn btn-primary"
-                    >
-                        + Start Idea Group
-                    </button>
-                    
-                    <button
-                        onClick={() => navigateTo('MatchScreen')}
-                        className="btn btn-secondary"
-                    >
-                        🔍 Find Teammates
-                    </button>
-                    
-                    <button
-                        onClick={() => navigateTo('CompleteProfile')}
-                        className="btn"
-                        style={{ backgroundColor: '#e9e9e9', color: 'black' }}
-                    >
-                        Edit Profile
-                    </button>
+        <div className="app-container">
+            {/* Header Section */}
+            <header className="page-header">
+                <div>
+                    <h1 style={{ margin: 0, fontSize: '2rem' }}>Enterprise Dashboard</h1>
+                    <p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Welcome back, {user?.full_name || 'Student'}</p>
                 </div>
-                
-                <button
-                    onClick={handleLogout}
-                    className="btn btn-danger"
-                >
-                    Logout
+                <button onClick={handleLogout} className="btn btn-danger">Logout</button>
+            </header>
+
+            {/* Action Toolbar */}
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <button onClick={() => navigateTo('CreateGroup')} className="btn btn-primary">
+                    + New Project
                 </button>
-            </div>
-            
-            {/* NEW: Search Bar Area */}
-            <div style={{ marginBottom: '20px' }}>
+                <button onClick={() => navigateTo('MatchScreen')} className="btn btn-secondary">
+                    🔍 Find Talent
+                </button>
+                <button onClick={() => navigateTo('CompleteProfile')} className="btn btn-secondary">
+                    ✏️ Edit Profile
+                </button>
+                {/* Admin/Analytics Button (Visible to all for now, protected by backend) */}
+                <button onClick={() => navigateTo('Analytics')} className="btn btn-secondary">
+                    📊 Analytics
+                </button>
+                
                 <input 
                     type="text" 
-                    placeholder="🔍 Search projects by title or keywords..." 
-                    className="input-field"
+                    className="input-field" 
+                    placeholder="Search projects..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ maxWidth: '300px', margin: 0, marginLeft: 'auto' }}
                 />
             </div>
-            
-            <div style={{ borderTop: '1px solid #eee', paddingTop: '20px' }}>
-                <h3>Active Projects ({filteredGroups.length})</h3>
-                {loading && <p>Loading projects from SQL...</p>}
-                {error && <p style={{ color: 'var(--color-danger)' }}>Error: {error}</p>}
-                
-                {!loading && filteredGroups.length === 0 && !error && (
-                    <p style={{ textAlign: 'center', color: '#666', marginTop: '20px' }}>
-                        {searchTerm ? "No projects match your search." : "No groups found. Be the first to create one!"}
-                    </p>
-                )}
-                
-                {/* Render the FILTERED list of groups */}
-                {filteredGroups.map(renderGroupItem)}
-            </div>
+
+            {/* Content Area */}
+            {loading ? (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading projects...</p>
+            ) : error ? (
+                <p style={{ color: 'var(--danger)', textAlign: 'center' }}>Error: {error}</p>
+            ) : (
+                <>
+                    {filteredGroups.length === 0 ? (
+                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '40px' }}>
+                            {searchTerm ? "No projects match your search." : "No active projects found. Start one today!"}
+                        </p>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+                            {filteredGroups.map(group => (
+                                <div 
+                                    key={group.id} 
+                                    className="card" 
+                                    onClick={() => navigateTo('GroupDetails', { groupId: group.id })}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                        <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-accent)' }}>{group.title}</h3>
+                                        <span style={{ fontSize: '1.5rem', color: 'var(--text-muted)' }}>→</span>
+                                    </div>
+                                    <p style={{ color: 'var(--text-muted)', lineHeight: '1.5', height: '45px', overflow: 'hidden', margin: '0 0 15px 0' }}>
+                                        {group.description}
+                                    </p>
+                                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                        📅 Created {new Date(group.createdAt).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }
