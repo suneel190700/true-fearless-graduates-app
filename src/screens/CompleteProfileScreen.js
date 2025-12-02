@@ -116,7 +116,14 @@ function CompleteProfileScreen({ navigateTo }) {
             navigateTo('Dashboard');
 
         } catch (e) {
-            console.error("Save error:", e);
+            console.log("GRAPHQL RAW ERROR -->", JSON.stringify(e, null, 2));
+
+if (e.errors && e.errors.length > 0) {
+    console.log("GRAPHQL ERROR MESSAGE →", e.errors[0].message);
+    console.log("GRAPHQL ERROR TYPE →", e.errors[0].errorType);
+    console.log("GRAPHQL ERROR PATH →", e.errors[0].path);
+}
+
             alert("Failed to save: " + e.message);
         } finally {
             setLoading(false);
