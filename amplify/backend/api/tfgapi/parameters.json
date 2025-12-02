@@ -1,5 +1,5 @@
 {
-  "AppSyncApiName": "truefearlessweb",
+  "AppSyncApiName": "tfgapi",
   "DynamoDBBillingMode": "PAY_PER_REQUEST",
   "DynamoDBEnableServerSideEncryption": false
 }

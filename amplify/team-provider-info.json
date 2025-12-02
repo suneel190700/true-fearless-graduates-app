@@ -15,9 +15,6 @@
       "auth": {
         "truefearlessweba1767d63": {}
       },
-      "api": {
-        "truefearlessweb": {}
-      },
       "storage": {
         "s3storage": {}
       }

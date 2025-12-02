@@ -1,13 +1,15 @@
 {
   "api": {
-    "truefearlessweb": {
+    "tfgapi": {
       "dependsOn": [],
       "output": {
         "authConfig": {
           "additionalAuthenticationProviders": [],
           "defaultAuthentication": {
             "apiKeyConfig": {
-              "apiKeyExpirationDays": 7
+              "apiKeyExpirationDate": "2026-12-02T23:01:05.510Z",
+              "apiKeyExpirationDays": 365,
+              "description": "api"
             },
             "authenticationType": "API_KEY"
           }

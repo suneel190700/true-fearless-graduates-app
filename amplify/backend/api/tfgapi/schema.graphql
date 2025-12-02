@@ -7,6 +7,7 @@ type User @model @auth(rules: [{ allow: public }]) {
   availability_hours: Int
   role: String
   profilePic: String
+  _version
   
   # Relationships
   groups: [GroupMember] @hasMany(indexName: "byUser", fields: ["id"])
