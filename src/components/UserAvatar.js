@@ -12,11 +12,10 @@ const UserAvatar = ({ profilePicKey, name }) => {
             options: { validateObjectExistence: true }
         })
             .then(res => setSrc(res.url.toString()))
-            .catch(e => {
-                console.log("Error loading avatar:", e);
+            .catch(err => {
+                console.log("Avatar load error:", err);
                 setSrc(null);
             });
-
     }, [profilePicKey]);
 
     const initial = name ? name.charAt(0).toUpperCase() : '?';

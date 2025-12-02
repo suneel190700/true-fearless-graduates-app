@@ -17,10 +17,13 @@ const getUserQuery = `
 `;
 
 const updateUserMutation = `
-  mutation UpdateUser($input: UpdateUserInput!) {
-    updateUser(input: $input) {
+  mutation UpdateUser($input: UpdateUserInput!, $condition: ModelUserConditionInput) {
+    updateUser(input: $input, condition: $condition) {
       id
       profilePic
+      skills
+      interests
+      availability_hours
     }
   }
 `;
@@ -31,19 +34,18 @@ function CompleteProfileScreen({ navigateTo }) {
     const [availabilityHours, setAvailabilityHours] = useState('');
     const [file, setFile] = useState(null);
     const [loading, setLoading] = useState(false);
+
     const client = generateClient();
 
-    useEffect(() => {
-        loadProfile();
-    }, []);
-
+    // Convert array → "React, Node"
     const normalizeToString = (val) => {
         if (!val) return '';
         if (Array.isArray(val)) return val.join(', ');
-        if (typeof val === 'string') return val; 
+        if (typeof val === 'string') return val;
         return '';
     };
 
+    // Convert "React,Node" → ["React","Node"]
     const normalizeToArray = (val) => {
         if (!val) return [];
         if (Array.isArray(val)) return val;
@@ -53,25 +55,30 @@ function CompleteProfileScreen({ navigateTo }) {
         return [];
     };
 
-    const [userVersion, setUserVersion] = useState(null);
-
+    // Load User Data
     const loadProfile = async () => {
-        const { userId } = await getCurrentUser();
-        const result = await client.graphql({
-            query: getUserQuery,
-            variables: { id: userId }
-        });
-    
-        const data = result.data.getUser;
-    
-        if (data) {
-            setUserVersion(data._version);     // SAVE VERSION
-            setSkills(normalizeToString(data.skills));
-            setInterests(normalizeToString(data.interests));
-            setAvailabilityHours(data.availability_hours || '');
+        try {
+            const { userId } = await getCurrentUser();
+            const result = await client.graphql({
+                query: getUserQuery,
+                variables: { id: userId }
+            });
+
+            const data = result.data.getUser;
+
+            if (data) {
+                setSkills(normalizeToString(data.skills));
+                setInterests(normalizeToString(data.interests));
+                setAvailabilityHours(data.availability_hours || '');
+            }
+        } catch (e) {
+            console.error("Error loading profile:", e);
         }
     };
-    
+
+    useEffect(() => {
+        loadProfile();
+    }, []);
 
     const handleFileChange = (e) => {
         const selected = e.target.files[0];
@@ -84,7 +91,7 @@ function CompleteProfileScreen({ navigateTo }) {
             const { userId } = await getCurrentUser();
             let profilePicPath = null;
 
-            // Upload Image
+            // Upload image
             if (file) {
                 const path = `public/avatars/${userId}-${Date.now()}.png`;
                 const result = await uploadData({
@@ -95,39 +102,30 @@ function CompleteProfileScreen({ navigateTo }) {
                 profilePicPath = result.path;
             }
 
-            // Convert to arrays safely
-            const skillsArray = normalizeToArray(skills);
-            const interestsArray = normalizeToArray(interests);
-
             const input = {
                 id: userId,
-                _version: userVersion,  // REQUIRED FOR UPDATE
-                skills: skillsArray,
-                interests: interestsArray,
+                skills: normalizeToArray(skills),
+                interests: normalizeToArray(interests),
                 availability_hours: Number(availabilityHours) || 0
             };
-            
-            if (profilePicPath) input.profilePic = profilePicPath;
-            
 
+            if (profilePicPath) input.profilePic = profilePicPath;
+
+            // ⭐ THIS is the DynamoDB fix
             await client.graphql({
                 query: updateUserMutation,
-                variables: { input }
+                variables: {
+                    input,
+                    condition: {}   // CRITICAL FIX
+                }
             });
 
-            alert("Profile Saved!");
-            navigateTo('Dashboard');
+            alert("Profile updated successfully!");
+            navigateTo("Dashboard");
 
         } catch (e) {
-            console.log("GRAPHQL RAW ERROR -->", JSON.stringify(e, null, 2));
-
-if (e.errors && e.errors.length > 0) {
-    console.log("GRAPHQL ERROR MESSAGE →", e.errors[0].message);
-    console.log("GRAPHQL ERROR TYPE →", e.errors[0].errorType);
-    console.log("GRAPHQL ERROR PATH →", e.errors[0].path);
-}
-
-            alert("Failed to save: " + e.message);
+            console.log("SAVE ERROR RAW →", JSON.stringify(e, null, 2));
+            alert("Failed to save: " + e?.errors?.[0]?.message || e.message);
         } finally {
             setLoading(false);
         }
@@ -138,7 +136,7 @@ if (e.errors && e.errors.length > 0) {
             <h2>Edit Profile</h2>
 
             <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                <label style={{ display: 'block', fontWeight: 'bold' }}>
                     Profile Picture
                 </label>
                 <input type="file" accept="image/*" onChange={handleFileChange} />
@@ -180,9 +178,9 @@ if (e.errors && e.errors.length > 0) {
             </button>
 
             <button
-                onClick={() => navigateTo('Dashboard')}
+                onClick={() => navigateTo("Dashboard")}
                 className="btn"
-                style={{ width: '100%', marginTop: '10px', background: '#eee', color: 'black' }}
+                style={{ width: '100%', marginTop: '10px', background: '#eee' }}
             >
                 Cancel
             </button>
