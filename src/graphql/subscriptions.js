@@ -11,6 +11,7 @@ export const onCreateUser = /* GraphQL */ `
       interests
       availability_hours
       role
+      profilePic
       groups {
         nextToken
         __typename
@@ -35,6 +36,7 @@ export const onUpdateUser = /* GraphQL */ `
       interests
       availability_hours
       role
+      profilePic
       groups {
         nextToken
         __typename
@@ -59,6 +61,7 @@ export const onDeleteUser = /* GraphQL */ `
       interests
       availability_hours
       role
+      profilePic
       groups {
         nextToken
         __typename
@@ -173,6 +176,7 @@ export const onCreateGroupMember = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -208,6 +212,7 @@ export const onUpdateGroupMember = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -243,6 +248,7 @@ export const onDeleteGroupMember = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -280,6 +286,7 @@ export const onCreateMessage = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -317,6 +324,7 @@ export const onUpdateMessage = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -354,6 +362,7 @@ export const onDeleteMessage = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename

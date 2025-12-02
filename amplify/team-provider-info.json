@@ -17,6 +17,9 @@
       },
       "api": {
         "truefearlessweb": {}
+      },
+      "storage": {
+        "s3storage": {}
       }
     }
   }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { signOut } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
+import { getUrl } from 'aws-amplify/storage';
 
 // GraphQL Query to list all groups
 const listGroupsQuery = `
@@ -27,6 +28,7 @@ function DashboardScreen({ navigateTo }) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [avatarUrl, setAvatarUrl] = useState(null);
     
     // Default user state (We will update this later to fetch real profile)
     const [user, setUser] = useState({ full_name: 'Student' }); 
@@ -62,6 +64,15 @@ function DashboardScreen({ navigateTo }) {
         }
     };
     // -------------------------------
+    const loadAvatar = async (profilePicKey) => {
+        if (!profilePicKey) return;
+        try {
+            const link = await getUrl({ key: profilePicKey });
+            setAvatarUrl(link.url);
+        } catch (e) { console.log("No avatar found"); }
+    };
+
+
 
     const filteredGroups = groups.filter(group => 
         group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||

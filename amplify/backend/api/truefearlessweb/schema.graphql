@@ -6,6 +6,7 @@ type User @model @auth(rules: [{ allow: public }]) {
   interests: [String]
   availability_hours: Int
   role: String
+  profilePic: String  # <--- ADD THIS LINE
   
   # Connect User to their memberships
   groups: [GroupMember] @hasMany(indexName: "byUser", fields: ["id"])

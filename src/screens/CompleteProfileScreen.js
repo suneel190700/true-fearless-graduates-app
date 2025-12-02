@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
+import { uploadData } from 'aws-amplify/storage'; // NEW: Import Storage
 
 const getUserQuery = `
   query GetUser($id: ID!) {
@@ -9,6 +10,7 @@ const getUserQuery = `
       skills
       interests
       availability_hours
+      profilePic
     }
   }
 `;
@@ -17,7 +19,7 @@ const updateUserMutation = `
   mutation UpdateUser($input: UpdateUserInput!) {
     updateUser(input: $input) {
       id
-      skills
+      profilePic
     }
   }
 `;
@@ -26,6 +28,7 @@ function CompleteProfileScreen({ navigateTo }) {
     const [skills, setSkills] = useState('');
     const [interests, setInterests] = useState('');
     const [availabilityHours, setAvailabilityHours] = useState('');
+    const [file, setFile] = useState(null); // Store selected file
     const [loading, setLoading] = useState(false);
     const client = generateClient();
 
@@ -49,29 +52,57 @@ function CompleteProfileScreen({ navigateTo }) {
         } catch (e) { console.error("Error loading profile", e); }
     };
 
+    const handleFileChange = (e) => {
+        const selected = e.target.files[0];
+        if (selected) setFile(selected);
+    };
+
     const handleSave = async () => {
         setLoading(true);
         try {
             const { userId } = await getCurrentUser();
+            let profilePicKey = null;
+
+            // 1. Upload Image to S3 (if a file was selected)
+            if (file) {
+                const fileName = `avatars/${userId}-${Date.now()}.png`;
+                const result = await uploadData({
+                    key: fileName,
+                    data: file,
+                    options: {
+                        accessLevel: 'guest' // Publicly readable (so others can see it)
+                    }
+                }).result;
+                profilePicKey = result.key;
+            }
+
+            // 2. Prepare Data for DB
             const skillsArray = skills.split(',').map(s => s.trim()).filter(s => s);
             const interestsArray = interests.split(',').map(i => i.trim()).filter(i => i);
+            
+            const input = {
+                id: userId,
+                skills: skillsArray,
+                interests: interestsArray,
+                availability_hours: parseInt(availabilityHours) || 0
+            };
 
+            // Only update profilePic if a new one was uploaded
+            if (profilePicKey) {
+                input.profilePic = profilePicKey;
+            }
+
+            // 3. Save to DynamoDB
             await client.graphql({
                 query: updateUserMutation,
-                variables: {
-                    input: {
-                        id: userId,
-                        skills: skillsArray,
-                        interests: interestsArray,
-                        availability_hours: parseInt(availabilityHours) || 0
-                    }
-                }
+                variables: { input }
             });
+
             alert("Profile Saved!");
-            navigateTo('Dashboard');
+            navigateTo('Dashboard'); 
         } catch (e) {
             console.error(e);
-            alert("Failed to save.");
+            alert("Failed to save: " + e.message);
         } finally { setLoading(false); }
     };
 
@@ -79,6 +110,11 @@ function CompleteProfileScreen({ navigateTo }) {
         <div className="form-container" style={{maxWidth: '500px'}}>
             <h2>Edit Profile</h2>
             
+            <div style={{marginBottom: '20px', textAlign: 'center'}}>
+                <label style={{display: 'block', marginBottom: '10px', fontWeight: 'bold'}}>Profile Picture</label>
+                <input type="file" accept="image/*" onChange={handleFileChange} />
+            </div>
+
             <label>Skills (Comma separated)</label>
             <input type="text" value={skills} onChange={(e) => setSkills(e.target.value)} className="input-field" placeholder="React, Node, Design" />
             

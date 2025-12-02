@@ -1,0 +1,14 @@
+{
+  "resourceName": "s3storage",
+  "policyUUID": "6661a0cc",
+  "bucketName": "tfgstorage",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ",
+    "DELETE"
+  ],
+  "triggerFunction": "NONE",
+  "groupAccess": {}
+}

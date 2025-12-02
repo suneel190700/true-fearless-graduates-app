@@ -11,6 +11,7 @@ export const getUser = /* GraphQL */ `
       interests
       availability_hours
       role
+      profilePic
       groups {
         nextToken
         __typename
@@ -40,6 +41,7 @@ export const listUsers = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -118,6 +120,7 @@ export const getGroupMember = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
@@ -175,6 +178,7 @@ export const getMessage = /* GraphQL */ `
         interests
         availability_hours
         role
+        profilePic
         createdAt
         updatedAt
         __typename
