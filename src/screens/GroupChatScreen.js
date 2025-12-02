@@ -31,16 +31,26 @@ function GroupChatScreen({ navigateTo, route }) {
     const client = generateClient();
 
     useEffect(() => {
+        let interval;
+    
         const init = async () => {
             const user = await getCurrentUser();
             setCurrentUser(user);
-            fetchMessages();
-            // Simple polling every 3 seconds
-            const interval = setInterval(fetchMessages, 3000);
-            return () => clearInterval(interval);
+    
+            await fetchMessages();
+    
+            interval = setInterval(() => {
+                fetchMessages();
+            }, 3000);
         };
+    
         init();
+    
+        return () => {
+            if (interval) clearInterval(interval);
+        };
     }, [groupId]);
+    
 
     const fetchMessages = async () => {
         try {

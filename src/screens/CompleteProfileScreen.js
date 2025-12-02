@@ -85,29 +85,29 @@ function CompleteProfileScreen({ navigateTo }) {
      LOAD USER PROFILE
   ================================= */
 
-  const loadProfile = async () => {
-    try {
-      const { userId } = await getCurrentUser();
-      const result = await client.graphql({
-        query: getUserQuery,
-        variables: { id: userId },
-      });
-
-      const data = result.data.getUser;
-
-      if (data) {
-        setSkills(normalizeToString(data.skills));
-        setInterests(normalizeToString(data.interests));
-        setAvailabilityHours(data.availability_hours || '');
-      }
-    } catch (e) {
-      console.error('Error loading profile:', e);
-    }
-  };
-
   useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const { userId } = await getCurrentUser();
+        const result = await client.graphql({
+          query: getUserQuery,
+          variables: { id: userId },
+        });
+
+        const data = result.data.getUser;
+
+        if (data) {
+          setSkills(normalizeToString(data.skills));
+          setInterests(normalizeToString(data.interests));
+          setAvailabilityHours(data.availability_hours || '');
+        }
+      } catch (e) {
+        console.error('Error loading profile:', e);
+      }
+    };
+
     loadProfile();
-  }, []);
+  }, [client]);
 
   /* ================================
      FILE SELECT
@@ -140,7 +140,7 @@ function CompleteProfileScreen({ navigateTo }) {
         profilePicPath = result.path;
       }
 
-      /* Prepare safe update input */
+      // Prepare safe update input
       const skillsArray = normalizeToArray(skills);
       const interestsArray = normalizeToArray(interests);
 
@@ -157,7 +157,6 @@ function CompleteProfileScreen({ navigateTo }) {
         input.profilePic = profilePicPath;
       }
 
-      /* FINAL UPDATE MUTATION */
       await client.graphql({
         query: updateUserMutation,
         variables: { input },
@@ -166,14 +165,9 @@ function CompleteProfileScreen({ navigateTo }) {
       alert('Profile updated successfully!');
       navigateTo('Dashboard');
     } catch (e) {
-      console.error(
-        'SAVE ERROR →',
-        JSON.stringify(e, null, 2)
-      );
-
+      console.error('SAVE ERROR →', JSON.stringify(e, null, 2));
       alert(
-        'Failed to save: ' +
-          (e?.errors?.[0]?.message || e.message)
+        'Failed to save: ' + (e?.errors?.[0]?.message || e.message)
       );
     } finally {
       setLoading(false);
