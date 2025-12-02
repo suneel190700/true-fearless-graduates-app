@@ -53,24 +53,25 @@ function CompleteProfileScreen({ navigateTo }) {
         return [];
     };
 
-    const loadProfile = async () => {
-        try {
-            const { userId } = await getCurrentUser();
-            const result = await client.graphql({
-                query: getUserQuery,
-                variables: { id: userId }
-            });
+    const [userVersion, setUserVersion] = useState(null);
 
-            const data = result.data.getUser;
-            if (data) {
-                setSkills(normalizeToString(data.skills));
-                setInterests(normalizeToString(data.interests));
-                setAvailabilityHours(data.availability_hours || '');
-            }
-        } catch (e) {
-            console.error("Error loading profile", e);
+    const loadProfile = async () => {
+        const { userId } = await getCurrentUser();
+        const result = await client.graphql({
+            query: getUserQuery,
+            variables: { id: userId }
+        });
+    
+        const data = result.data.getUser;
+    
+        if (data) {
+            setUserVersion(data._version);     // SAVE VERSION
+            setSkills(normalizeToString(data.skills));
+            setInterests(normalizeToString(data.interests));
+            setAvailabilityHours(data.availability_hours || '');
         }
     };
+    
 
     const handleFileChange = (e) => {
         const selected = e.target.files[0];
@@ -100,12 +101,14 @@ function CompleteProfileScreen({ navigateTo }) {
 
             const input = {
                 id: userId,
+                _version: userVersion,  // REQUIRED FOR UPDATE
                 skills: skillsArray,
                 interests: interestsArray,
                 availability_hours: Number(availabilityHours) || 0
             };
-
+            
             if (profilePicPath) input.profilePic = profilePicPath;
+            
 
             await client.graphql({
                 query: updateUserMutation,
