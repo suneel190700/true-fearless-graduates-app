@@ -6,12 +6,12 @@ type User @model @auth(rules: [{ allow: public }]) {
   interests: [String]
   availability_hours: Int
   role: String
-  profilePic: String  # <--- ADD THIS LINE
+  profilePic: String
   
-  # Connect User to their memberships
+  # Relationships
   groups: [GroupMember] @hasMany(indexName: "byUser", fields: ["id"])
   messages: [Message] @hasMany(indexName: "byUserMessages", fields: ["id"])
-  tasks: [Task] @hasMany(indexName: "byUserTasks", fields: ["id"])
+  # REMOVED "tasks" from here because it caused the error
 }
 
 type Group @model @auth(rules: [{ allow: public }]) {
@@ -20,7 +20,7 @@ type Group @model @auth(rules: [{ allow: public }]) {
   description: String
   created_by: ID!
   
-  # Connect Group to its members (This was the missing link!)
+  # Connect Group to its members
   members: [GroupMember] @hasMany(indexName: "byGroup", fields: ["id"])
   
   # Connect Messages and Tasks
