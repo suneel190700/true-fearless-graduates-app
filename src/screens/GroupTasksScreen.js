@@ -1,115 +1,101 @@
 import React, { useState, useEffect } from 'react';
+import { generateClient } from 'aws-amplify/api';
+
+const listTasksQuery = `
+  query ListTasks($filter: ModelTaskFilterInput) {
+    listTasks(filter: $filter) {
+      items { id title status }
+    }
+  }
+`;
+
+const createTaskMutation = `
+  mutation CreateTask($input: CreateTaskInput!) {
+    createTask(input: $input) { id }
+  }
+`;
+
+const updateTaskMutation = `
+  mutation UpdateTask($input: UpdateTaskInput!) {
+    updateTask(input: $input) { id }
+  }
+`;
+
+const deleteTaskMutation = `
+  mutation DeleteTask($input: DeleteTaskInput!) {
+    deleteTask(input: $input) { id }
+  }
+`;
 
 function GroupTasksScreen({ navigateTo, route }) {
     const groupId = route.params?.groupId;
     const [tasks, setTasks] = useState([]);
-    const [newTaskTitle, setNewTaskTitle] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [newTask, setNewTask] = useState('');
+    const client = generateClient();
 
-    // Fetch Tasks
+    useEffect(() => { fetchTasks(); }, [groupId]);
+
     const fetchTasks = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`https://tfg-backend-x926.onrender.com/api/tasks/${groupId}`, {
-                headers: { 'x-auth-token': token }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setTasks(data);
-            }
-        } catch (e) {
-            console.error("Error fetching tasks:", e);
-        } finally {
-            setLoading(false);
-        }
+        const result = await client.graphql({
+            query: listTasksQuery,
+            variables: { filter: { groupID: { eq: groupId } } }
+        });
+        setTasks(result.data.listTasks.items);
     };
 
-    // Add Task
     const addTask = async () => {
-        if (!newTaskTitle.trim()) return;
-        try {
-            const token = localStorage.getItem('token');
-            await fetch(`https://tfg-backend-x926.onrender.com/api/tasks/${groupId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                body: JSON.stringify({ title: newTaskTitle })
-            });
-            setNewTaskTitle('');
-            fetchTasks();
-        } catch (e) { alert("Failed to add task"); }
+        if (!newTask) return;
+        await client.graphql({
+            query: createTaskMutation,
+            variables: { input: { title: newTask, status: 'pending', groupID: groupId } }
+        });
+        setNewTask('');
+        fetchTasks();
     };
 
-    // Update Status
-    const updateStatus = async (taskId, newStatus) => {
-        try {
-            const token = localStorage.getItem('token');
-            await fetch(`https://tfg-backend-x926.onrender.com/api/tasks/${taskId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                body: JSON.stringify({ status: newStatus })
-            });
-            fetchTasks();
-        } catch (e) { alert("Failed to update status"); }
+    const toggleStatus = async (task) => {
+        const newStatus = task.status === 'done' ? 'pending' : 'done';
+        await client.graphql({
+            query: updateTaskMutation,
+            variables: { input: { id: task.id, status: newStatus } }
+        });
+        fetchTasks();
     };
 
-    // Delete Task
-    const deleteTask = async (taskId) => {
-        if(!window.confirm("Delete this task?")) return;
-        try {
-            const token = localStorage.getItem('token');
-            await fetch(`https://tfg-backend-x926.onrender.com/api/tasks/${taskId}`, {
-                method: 'DELETE',
-                headers: { 'x-auth-token': token }
-            });
-            fetchTasks();
-        } catch (e) { alert("Failed to delete task"); }
+    const deleteTask = async (id) => {
+        if (!window.confirm("Delete task?")) return;
+        await client.graphql({
+            query: deleteTaskMutation,
+            variables: { input: { id } }
+        });
+        fetchTasks();
     };
-
-    useEffect(() => {
-        if (groupId) fetchTasks();
-    }, [groupId]);
 
     return (
         <div className="form-container" style={{maxWidth: '800px'}}>
-            <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                <button onClick={() => navigateTo('GroupDetails', { groupId })} className="btn" style={{marginRight: '15px'}}>
-                    &larr; Back
-                </button>
-                <h2>Project Tasks</h2>
+             <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                <button onClick={() => navigateTo('GroupDetails', { groupId })} className="btn" style={{marginRight: '15px'}}>&larr; Back</button>
+                <h2>Tasks</h2>
             </div>
 
             <div style={{display: 'flex', marginBottom: '20px'}}>
-                <input 
-                    type="text" 
-                    className="input-field" 
-                    style={{margin: 0, borderRadius: '4px 0 0 4px', flex: 1}} 
-                    placeholder="New task..." 
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                />
-                <button onClick={addTask} className="btn btn-primary" style={{borderRadius: '0 4px 4px 0'}}>Add</button>
+                <input type="text" className="input-field" style={{margin: 0, flex: 1}} value={newTask} onChange={(e) => setNewTask(e.target.value)} placeholder="New task..." />
+                <button onClick={addTask} className="btn btn-primary">Add</button>
             </div>
 
-            {loading ? <p>Loading tasks...</p> : (
-                tasks.length === 0 ? <p>No tasks yet.</p> : (
-                    <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-                        {tasks.map(task => (
-                            <div key={task.task_id} className="card" style={{padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                                <div>
-                                    <h4 style={{margin: '0 0 5px 0'}}>{task.title}</h4>
-                                    <small>Status: <strong style={{color: task.status === 'done' ? 'green' : 'orange'}}>{task.status.replace('_', ' ').toUpperCase()}</strong></small>
-                                </div>
-                                <div style={{display: 'flex', gap: '5px'}}>
-                                    {task.status !== 'done' && (
-                                        <button onClick={() => updateStatus(task.task_id, 'done')} className="btn" style={{padding: '5px 10px', backgroundColor: '#28a745', color: 'white'}}>✓ Done</button>
-                                    )}
-                                    <button onClick={() => deleteTask(task.task_id)} className="btn btn-danger" style={{padding: '5px 10px'}}>X</button>
-                                </div>
-                            </div>
-                        ))}
+            {tasks.map(task => (
+                <div key={task.id} className="card" style={{padding: '15px', display: 'flex', justifyContent: 'space-between'}}>
+                    <div>
+                        <h4 style={{margin: 0, textDecoration: task.status === 'done' ? 'line-through' : 'none'}}>{task.title}</h4>
                     </div>
-                )
-            )}
+                    <div>
+                        <button onClick={() => toggleStatus(task)} className="btn" style={{marginRight: '5px', background: task.status === 'done' ? 'orange' : 'green', color: 'white'}}>
+                            {task.status === 'done' ? 'Undo' : 'Done'}
+                        </button>
+                        <button onClick={() => deleteTask(task.id)} className="btn btn-danger">X</button>
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }

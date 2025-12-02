@@ -1,59 +1,71 @@
 import React, { useState, useEffect } from 'react';
-import { signOut } from 'firebase/auth'; 
-import { auth } from '../firebaseConfig'; 
+import { signOut } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+
+// GraphQL Query to list all groups
+const listGroupsQuery = `
+  query ListGroups {
+    listGroups {
+      items {
+        id
+        title
+        description
+        createdAt
+        members {
+            items {
+                user {
+                    full_name
+                }
+            }
+        }
+      }
+    }
+  }
+`;
 
 function DashboardScreen({ navigateTo }) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [user, setUser] = useState(null);
+    
+    // Default user state (We will update this later to fetch real profile)
+    const [user, setUser] = useState({ full_name: 'Student' }); 
+
+    const client = generateClient();
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) setUser(JSON.parse(storedUser));
         fetchGroups();
     }, []);
 
     const fetchGroups = async () => {
-        setLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            if (!token) throw new Error("No session token found. Please log in.");
-
-            const response = await fetch('https://tfg-backend-x926.onrender.com/api/groups', {
-                headers: { 'x-auth-token': token }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const mappedGroups = data.map(g => ({
-                    id: g.group_id,
-                    title: g.title,
-                    description: g.description,
-                    createdAt: g.created_at
-                }));
-                setGroups(mappedGroups);
-            } else {
-                throw new Error('Failed to fetch groups');
-            }
+            const groupData = await client.graphql({ query: listGroupsQuery });
+            const groupsList = groupData.data.listGroups.items;
+            setGroups(groupsList);
         } catch (e) {
-            console.error("API Error:", e);
-            setError(e.message);
+            console.error("Error fetching groups:", e);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleLogout = () => {
-        localStorage.clear();
-        signOut(auth).catch(console.error);
-        window.location.reload(); 
+    // --- UPDATED LOGOUT FUNCTION ---
+    const handleLogout = async () => {
+        try {
+            await signOut(); // Tell AWS to kill the session
+            navigateTo('Login'); // Go to Login screen immediately (No reload)
+        } catch (error) {
+            console.log('error signing out: ', error);
+            // If AWS fails, force the user to Login screen anyway
+            alert("Logout had an issue, but taking you to login.");
+            navigateTo('Login');
+        }
     };
+    // -------------------------------
 
     const filteredGroups = groups.filter(group => 
         group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        group.description.toLowerCase().includes(searchTerm.toLowerCase())
+        (group.description && group.description.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (
@@ -61,48 +73,42 @@ function DashboardScreen({ navigateTo }) {
             {/* Header Section */}
             <header className="page-header">
                 <div>
-                    <h1 style={{ margin: 0, fontSize: '2rem' }}>Enterprise Dashboard</h1>
-                    <p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Welcome back, {user?.full_name || 'Student'}</p>
+                    <h1 style={{ margin: 0, fontSize: '2rem' }}>Project Dashboard</h1>
+                    <p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Welcome back, {user.full_name}</p>
                 </div>
-                <button onClick={handleLogout} className="btn btn-danger">Logout</button>
+                <button onClick={handleLogout} className="btn btn-danger">LOGOUT</button>
             </header>
 
             {/* Action Toolbar */}
             <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={() => navigateTo('CreateGroup')} className="btn btn-primary">
-                    + New Project
+                    + NEW PROJECT
                 </button>
                 <button onClick={() => navigateTo('MatchScreen')} className="btn btn-secondary">
-                    🔍 Find Talent
+                    🔍 FIND TALENT
                 </button>
                 <button onClick={() => navigateTo('CompleteProfile')} className="btn btn-secondary">
-                    ✏️ Edit Profile
+                    ✏️ EDIT PROFILE
                 </button>
-                {/* Admin/Analytics Button (Visible to all for now, protected by backend) */}
-                <button onClick={() => navigateTo('Analytics')} className="btn btn-secondary">
-                    📊 Analytics
-                </button>
-                
-                <input 
-                    type="text" 
-                    className="input-field" 
-                    placeholder="Search projects..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ maxWidth: '300px', margin: 0, marginLeft: 'auto' }}
-                />
             </div>
+            
+            <input 
+                type="text" 
+                className="input-field" 
+                placeholder="Search projects..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ maxWidth: '300px', marginBottom: '20px' }}
+            />
 
             {/* Content Area */}
             {loading ? (
                 <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading projects...</p>
-            ) : error ? (
-                <p style={{ color: 'var(--danger)', textAlign: 'center' }}>Error: {error}</p>
             ) : (
                 <>
                     {filteredGroups.length === 0 ? (
                         <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '40px' }}>
-                            {searchTerm ? "No projects match your search." : "No active projects found. Start one today!"}
+                            No active projects found. Start one today!
                         </p>
                     ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>

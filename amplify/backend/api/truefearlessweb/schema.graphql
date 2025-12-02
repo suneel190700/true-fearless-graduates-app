@@ -1,0 +1,60 @@
+type User @model @auth(rules: [{ allow: public }]) {
+  id: ID!
+  email: String!
+  full_name: String
+  skills: [String]
+  interests: [String]
+  availability_hours: Int
+  role: String
+  
+  # Connect User to their memberships
+  groups: [GroupMember] @hasMany(indexName: "byUser", fields: ["id"])
+  messages: [Message] @hasMany(indexName: "byUserMessages", fields: ["id"])
+}
+
+type Group @model @auth(rules: [{ allow: public }]) {
+  id: ID!
+  title: String!
+  description: String
+  created_by: ID!
+  
+  # Connect Group to its members (This was the missing link!)
+  members: [GroupMember] @hasMany(indexName: "byGroup", fields: ["id"])
+  
+  # Connect Messages and Tasks
+  messages: [Message] @hasMany(indexName: "byGroupMessages", fields: ["id"])
+  tasks: [Task] @hasMany(indexName: "byGroupTasks", fields: ["id"])
+}
+
+type GroupMember @model @auth(rules: [{ allow: public }]) {
+  id: ID!
+  groupID: ID! @index(name: "byGroup")
+  userID: ID! @index(name: "byUser")
+  
+  group: Group @belongsTo(fields: ["groupID"])
+  user: User @belongsTo(fields: ["userID"])
+}
+
+type Message @model @auth(rules: [{ allow: public }]) {
+  id: ID!
+  content: String!
+  attachmentUrl: String
+  fileName: String
+  fileType: String
+  
+  groupID: ID! @index(name: "byGroupMessages")
+  userID: ID! @index(name: "byUserMessages")
+  
+  group: Group @belongsTo(fields: ["groupID"])
+  user: User @belongsTo(fields: ["userID"])
+}
+
+type Task @model @auth(rules: [{ allow: public }]) {
+  id: ID!
+  title: String!
+  description: String
+  status: String!
+  
+  groupID: ID! @index(name: "byGroupTasks")
+  group: Group @belongsTo(fields: ["groupID"])
+}

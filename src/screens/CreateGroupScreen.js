@@ -1,52 +1,71 @@
 import React, { useState } from 'react';
+import { generateClient } from 'aws-amplify/api';
+import { getCurrentUser } from 'aws-amplify/auth';
+
+// 1. Mutation to create the Group
+const createGroupMutation = `
+  mutation CreateGroup($input: CreateGroupInput!) {
+    createGroup(input: $input) {
+      id
+      title
+    }
+  }
+`;
+
+// 2. Mutation to add the creator as a Member (Link Table)
+const createMemberMutation = `
+  mutation CreateMember($input: CreateGroupMemberInput!) {
+    createGroupMember(input: $input) {
+      id
+    }
+  }
+`;
 
 function CreateGroupScreen({ navigateTo }) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
+    const client = generateClient();
 
     const handleCreateGroup = async () => {
-        const token = localStorage.getItem('token');
+        if (!title || !description) return alert("Title and description are required.");
         
-        if (!token) {
-            setError("You must be logged in to create a group.");
-            return;
-        }
-        if (!title || !description) {
-            setError("Title and description are required.");
-            return;
-        }
-
-        setError(null);
         setLoading(true);
-
         try {
-            // Call the Enterprise API
-            const response = await fetch('https://tfg-backend-x926.onrender.com/api/groups', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token // Authenticate with your JWT
-                },
-                body: JSON.stringify({
-                    title: title,
-                    description: description
-                }),
+            // A. Get Current User ID
+            const { userId } = await getCurrentUser();
+
+            // B. Create the Group
+            const groupResult = await client.graphql({
+                query: createGroupMutation,
+                variables: {
+                    input: {
+                        title,
+                        description,
+                        created_by: userId // Store who made it
+                    }
+                }
             });
 
-            const data = await response.json();
+            const newGroupId = groupResult.data.createGroup.id;
 
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to create group');
-            }
+            // C. Add Creator as a Member
+            await client.graphql({
+                query: createMemberMutation,
+                variables: {
+                    input: {
+                        groupID: newGroupId,
+                        userID: userId
+                    }
+                }
+            });
 
-            console.log("Group created successfully!", data);
-            navigateTo('Dashboard'); 
+            console.log("Group Created:", newGroupId);
+            navigateTo('Dashboard');
 
         } catch (e) {
-            console.error("Group creation error:", e.message);
-            setError(e.message);
+            console.error("Error creating group:", e);
+            alert("Failed to create group. See console for details.");
         } finally {
             setLoading(false);
         }
@@ -55,12 +74,12 @@ function CreateGroupScreen({ navigateTo }) {
     return (
         <div className="form-container" style={{maxWidth: '500px'}}>
             <h2>Start New Project</h2>
-            <p>Launch a new initiative on the Enterprise platform.</p>
+            <p>Launch a new initiative.</p>
             
             <label>Project Title</label>
             <input
                 type="text"
-                placeholder="e.g., AI Research Initiative"
+                placeholder="e.g., AI Research"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="input-field"
@@ -68,15 +87,13 @@ function CreateGroupScreen({ navigateTo }) {
             
             <label>Description</label>
             <textarea
-                placeholder="Describe the goals and requirements..."
+                placeholder="Describe the goals..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows="4"
                 className="input-field"
             />
             
-            {error && <p style={{ color: 'var(--color-danger)', textAlign: 'center' }}>{error}</p>}
-
             <button
                 onClick={handleCreateGroup}
                 disabled={loading}

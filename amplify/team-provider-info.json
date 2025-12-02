@@ -1,0 +1,23 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-truefearlessweb-dev-01085-authRole",
+      "UnauthRoleArn": "arn:aws:iam::373229397830:role/amplify-truefearlessweb-dev-01085-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::373229397830:role/amplify-truefearlessweb-dev-01085-authRole",
+      "Region": "us-east-2",
+      "DeploymentBucketName": "amplify-truefearlessweb-dev-01085-deployment",
+      "UnauthRoleName": "amplify-truefearlessweb-dev-01085-unauthRole",
+      "StackName": "amplify-truefearlessweb-dev-01085",
+      "StackId": "arn:aws:cloudformation:us-east-2:373229397830:stack/amplify-truefearlessweb-dev-01085/3e5582b0-cf9a-11f0-86d6-0684f59a84cb",
+      "AmplifyAppId": "d22idjepynj0ao"
+    },
+    "categories": {
+      "auth": {
+        "truefearlessweba1767d63": {}
+      },
+      "api": {
+        "truefearlessweb": {}
+      }
+    }
+  }
+}

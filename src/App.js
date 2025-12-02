@@ -1,50 +1,51 @@
 import React, { useState, useEffect } from 'react';
+import { getCurrentUser } from 'aws-amplify/auth';
+
 // WEEK 1 Screens
 import SignupScreen from './screens/SignupScreen';
 import LoginScreen from './screens/LoginScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
 import DashboardScreen from './screens/DashboardScreen';
+
 // WEEK 2/3 Screens
 import CreateGroupScreen from './screens/CreateGroupScreen';
 import GroupDetailsScreen from './screens/GroupDetailsScreen';
 import GroupChatScreen from './screens/GroupChatScreen'; 
 import MatchScreen from './screens/MatchScreen';
 import ProfileViewerScreen from './screens/ProfileViewerScreen'; 
+import GroupTasksScreen from './screens/GroupTasksScreen'; 
+import AnalyticsScreen from './screens/AnalyticsScreen'; 
 
-import GroupTasksScreen from './screens/GroupTasksScreen'; // <--- IMPORT THIS
-import AnalyticsScreen from './screens/AnalyticsScreen'; // <--- IMPORT THIS
-
-
-
-const LoadingScreen = () => <h2 style={{ textAlign: 'center', marginTop: '50px' }}>Loading... Checking Enterprise Session</h2>;
+const LoadingScreen = () => <h2 style={{ textAlign: 'center', marginTop: '50px' }}>Loading... Connecting to AWS</h2>;
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState('Loading');
-  const [user, setUser] = useState(null); // Stores the User Object
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [user, setUser] = useState(null);
   const [routeParams, setRouteParams] = useState({});
 
   useEffect(() => {
-    // Check for Enterprise Token in Local Storage instead of Firebase
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-
-    if (token && storedUser) {
-        setUser(JSON.parse(storedUser));
-        // If user exists, go to Dashboard (We will build a SQL Profile check later)
-        setCurrentScreen('Dashboard');
-    } else {
-        setCurrentScreen('Signup');
-    }
-    setLoadingAuth(false);
+    checkAuth();
   }, []);
+
+  // NEW: Check AWS for the current user
+  async function checkAuth() {
+    try {
+      const currentUser = await getCurrentUser();
+      console.log("User is logged in:", currentUser);
+      setUser(currentUser);
+      setCurrentScreen('Dashboard');
+    } catch (err) {
+      console.log("User is not logged in");
+      setCurrentScreen('Login');
+    }
+  }
 
   const navigateTo = (screenName, params = {}) => {
     setRouteParams(params);
     setCurrentScreen(screenName);
   };
 
-  if (loadingAuth || currentScreen === 'Loading') {
+  if (currentScreen === 'Loading') {
       return <LoadingScreen />;
   }
   
@@ -53,8 +54,8 @@ function App() {
     case 'Login':
       ScreenComponent = LoginScreen;
       break;
-    case 'CompleteProfile':
-      ScreenComponent = CompleteProfileScreen;
+    case 'Signup':
+      ScreenComponent = SignupScreen;
       break;
     case 'Dashboard':
       ScreenComponent = DashboardScreen;
@@ -71,18 +72,20 @@ function App() {
     case 'MatchScreen':
       ScreenComponent = MatchScreen; 
       break;
-    case 'GroupTasks': // <--- ADD THIS CASE
+    case 'CompleteProfile':
+      ScreenComponent = CompleteProfileScreen;
+      break;
+    case 'GroupTasks': 
       ScreenComponent = GroupTasksScreen;
       break;
     case 'ProfileViewer':
       ScreenComponent = ProfileViewerScreen;
       break;
-    case 'Analytics': // <--- ADD THIS
+    case 'Analytics': 
       ScreenComponent = AnalyticsScreen;
       break;
-    case 'Signup':
     default:
-      ScreenComponent = SignupScreen;
+      ScreenComponent = LoginScreen;
   }
 
   return (
