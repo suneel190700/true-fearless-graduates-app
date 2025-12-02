@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { signIn } from 'aws-amplify/auth'; // NEW: Amplify Auth Import
 
 function LoginScreen({ navigateTo }) {
     const [email, setEmail] = useState('');
@@ -16,36 +17,22 @@ function LoginScreen({ navigateTo }) {
         setLoading(true);
 
         try {
-            // Call the Enterprise API
-            const response = await fetch('https://tfg-backend-x926.onrender.com/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: password
-                }),
-            });
+            // NEW: Amplify Sign In
+            const { isSignedIn, nextStep } = await signIn({ username: email, password });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
+            if (isSignedIn) {
+                console.log("Login Successful");
+                // We don't need to manually store tokens anymore; Amplify handles it.
+                // Just reload or navigate to Dashboard.
+                navigateTo('Dashboard');
+                window.location.reload(); 
+            } else {
+                // Handle cases where MFA or password change might be required (optional for MVP)
+                console.log("Next step:", nextStep);
             }
 
-            // Success! Save the Token
-            console.log("Login Successful:", data);
-            
-            // Store the token and user info in browser storage
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-
-            // Force a page reload to update App.js state (Simple method for now)
-            window.location.reload(); 
-
         } catch (e) {
-            console.error("Login error:", e.message);
+            console.error("Login error:", e);
             setError(e.message);
         } finally {
             setLoading(false);
