@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
-import { uploadData } from 'aws-amplify/storage'; // NEW: Import Storage
+import { uploadData } from 'aws-amplify/storage';
 
 const getUserQuery = `
   query GetUser($id: ID!) {
@@ -11,6 +11,7 @@ const getUserQuery = `
       interests
       availability_hours
       profilePic
+      full_name
     }
   }
 `;
@@ -28,13 +29,29 @@ function CompleteProfileScreen({ navigateTo }) {
     const [skills, setSkills] = useState('');
     const [interests, setInterests] = useState('');
     const [availabilityHours, setAvailabilityHours] = useState('');
-    const [file, setFile] = useState(null); // Store selected file
+    const [file, setFile] = useState(null);
     const [loading, setLoading] = useState(false);
     const client = generateClient();
 
     useEffect(() => {
         loadProfile();
     }, []);
+
+    const normalizeToString = (val) => {
+        if (!val) return '';
+        if (Array.isArray(val)) return val.join(', ');
+        if (typeof val === 'string') return val; 
+        return '';
+    };
+
+    const normalizeToArray = (val) => {
+        if (!val) return [];
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+            return val.split(',').map(s => s.trim()).filter(Boolean);
+        }
+        return [];
+    };
 
     const loadProfile = async () => {
         try {
@@ -43,13 +60,16 @@ function CompleteProfileScreen({ navigateTo }) {
                 query: getUserQuery,
                 variables: { id: userId }
             });
+
             const data = result.data.getUser;
             if (data) {
-                if (data.skills) setSkills(data.skills.join(', '));
-                if (data.interests) setInterests(data.interests.join(', '));
-                if (data.availability_hours) setAvailabilityHours(data.availability_hours);
+                setSkills(normalizeToString(data.skills));
+                setInterests(normalizeToString(data.interests));
+                setAvailabilityHours(data.availability_hours || '');
             }
-        } catch (e) { console.error("Error loading profile", e); }
+        } catch (e) {
+            console.error("Error loading profile", e);
+        }
     };
 
     const handleFileChange = (e) => {
@@ -61,36 +81,31 @@ function CompleteProfileScreen({ navigateTo }) {
         setLoading(true);
         try {
             const { userId } = await getCurrentUser();
-            let profilePicPath = null; // Changed from profilePicKey
+            let profilePicPath = null;
 
-            // 1. Upload Image using PATH
+            // Upload Image
             if (file) {
-                // We use 'public/' so the path is standard and easy to read
                 const path = `public/avatars/${userId}-${Date.now()}.png`;
-                
                 const result = await uploadData({
-                    path: path, // <--- NEW: Use path instead of key
+                    path: path,
                     data: file
-                    // No 'options' needed for public path
                 }).result;
+
                 profilePicPath = result.path;
             }
 
-            // 2. Prepare Data
-            const skillsArray = skills.split(',').map(s => s.trim()).filter(s => s);
-            const interestsArray = interests.split(',').map(i => i.trim()).filter(i => i);
-            
+            // Convert to arrays safely
+            const skillsArray = normalizeToArray(skills);
+            const interestsArray = normalizeToArray(interests);
+
             const input = {
                 id: userId,
                 skills: skillsArray,
                 interests: interestsArray,
-                availability_hours: parseInt(availabilityHours) || 0
+                availability_hours: Number(availabilityHours) || 0
             };
 
-            // Save the full PATH to the database
-            if (profilePicPath) {
-                input.profilePic = profilePicPath;
-            }
+            if (profilePicPath) input.profilePic = profilePicPath;
 
             await client.graphql({
                 query: updateUserMutation,
@@ -98,36 +113,69 @@ function CompleteProfileScreen({ navigateTo }) {
             });
 
             alert("Profile Saved!");
-            navigateTo('Dashboard'); 
+            navigateTo('Dashboard');
+
         } catch (e) {
-            console.error(e);
+            console.error("Save error:", e);
             alert("Failed to save: " + e.message);
-        } finally { setLoading(false); }
+        } finally {
+            setLoading(false);
+        }
     };
 
-            
     return (
-        <div className="form-container" style={{maxWidth: '500px'}}>
+        <div className="form-container" style={{ maxWidth: '500px' }}>
             <h2>Edit Profile</h2>
-            
-            <div style={{marginBottom: '20px', textAlign: 'center'}}>
-                <label style={{display: 'block', marginBottom: '10px', fontWeight: 'bold'}}>Profile Picture</label>
+
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                    Profile Picture
+                </label>
                 <input type="file" accept="image/*" onChange={handleFileChange} />
             </div>
 
             <label>Skills (Comma separated)</label>
-            <input type="text" value={skills} onChange={(e) => setSkills(e.target.value)} className="input-field" placeholder="React, Node, Design" />
-            
+            <input
+                type="text"
+                value={skills}
+                onChange={(e) => setSkills(e.target.value)}
+                className="input-field"
+                placeholder="React, Node, Design"
+            />
+
             <label>Interests (Comma separated)</label>
-            <input type="text" value={interests} onChange={(e) => setInterests(e.target.value)} className="input-field" placeholder="AI, Gaming" />
-            
+            <input
+                type="text"
+                value={interests}
+                onChange={(e) => setInterests(e.target.value)}
+                className="input-field"
+                placeholder="AI, Gaming"
+            />
+
             <label>Weekly Availability (Hours)</label>
-            <input type="number" value={availabilityHours} onChange={(e) => setAvailabilityHours(e.target.value)} className="input-field" />
-            
-            <button onClick={handleSave} disabled={loading} className="btn btn-primary" style={{ width: '100%', marginTop: '15px' }}>
+            <input
+                type="number"
+                value={availabilityHours}
+                onChange={(e) => setAvailabilityHours(e.target.value)}
+                className="input-field"
+            />
+
+            <button
+                onClick={handleSave}
+                disabled={loading}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '15px' }}
+            >
                 {loading ? "Saving..." : "Save Profile"}
             </button>
-            <button onClick={() => navigateTo('Dashboard')} className="btn" style={{ width: '100%', marginTop: '10px', background:'#eee', color:'black' }}>Cancel</button>
+
+            <button
+                onClick={() => navigateTo('Dashboard')}
+                className="btn"
+                style={{ width: '100%', marginTop: '10px', background: '#eee', color: 'black' }}
+            >
+                Cancel
+            </button>
         </div>
     );
 }
