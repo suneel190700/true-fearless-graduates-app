@@ -17,13 +17,13 @@ const getUserQuery = `
 `;
 
 const updateUserMutation = `
-  mutation UpdateUser($input: UpdateUserInput!, $condition: ModelUserConditionInput) {
-    updateUser(input: $input, condition: $condition) {
+  mutation UpdateUser($input: UpdateUserInput!) {
+    updateUser(input: $input) {
       id
-      profilePic
       skills
       interests
       availability_hours
+      profilePic
     }
   }
 `;
@@ -37,7 +37,6 @@ function CompleteProfileScreen({ navigateTo }) {
 
     const client = generateClient();
 
-    // Convert array → "React, Node"
     const normalizeToString = (val) => {
         if (!val) return '';
         if (Array.isArray(val)) return val.join(', ');
@@ -45,17 +44,16 @@ function CompleteProfileScreen({ navigateTo }) {
         return '';
     };
 
-    // Convert "React,Node" → ["React","Node"]
     const normalizeToArray = (val) => {
-        if (!val) return [];
-        if (Array.isArray(val)) return val;
+        if (!val) return null; // <-- RETURN NULL, NOT EMPTY ARRAY
+        if (Array.isArray(val)) return val.length ? val : null;
         if (typeof val === 'string') {
-            return val.split(',').map(s => s.trim()).filter(Boolean);
+            const arr = val.split(',').map(s => s.trim()).filter(Boolean);
+            return arr.length ? arr : null;
         }
-        return [];
+        return null;
     };
 
-    // Load User Data
     const loadProfile = async () => {
         try {
             const { userId } = await getCurrentUser();
@@ -65,7 +63,6 @@ function CompleteProfileScreen({ navigateTo }) {
             });
 
             const data = result.data.getUser;
-
             if (data) {
                 setSkills(normalizeToString(data.skills));
                 setInterests(normalizeToString(data.interests));
@@ -91,41 +88,41 @@ function CompleteProfileScreen({ navigateTo }) {
             const { userId } = await getCurrentUser();
             let profilePicPath = null;
 
-            // Upload image
             if (file) {
                 const path = `public/avatars/${userId}-${Date.now()}.png`;
                 const result = await uploadData({
-                    path: path,
+                    path,
                     data: file
                 }).result;
 
                 profilePicPath = result.path;
             }
 
+            const skillsArray = normalizeToArray(skills);
+            const interestsArray = normalizeToArray(interests);
+
             const input = {
-                id: userId,
-                skills: normalizeToArray(skills),
-                interests: normalizeToArray(interests),
-                availability_hours: Number(availabilityHours) || 0
+                id: userId
             };
 
+            if (skillsArray) input.skills = skillsArray;
+            if (interestsArray) input.interests = interestsArray;
+            if (availabilityHours !== '') {
+                input.availability_hours = Number(availabilityHours);
+            }
             if (profilePicPath) input.profilePic = profilePicPath;
 
-            // ⭐ THIS is the DynamoDB fix
             await client.graphql({
                 query: updateUserMutation,
-                variables: {
-                    input,
-                    condition: {}   // CRITICAL FIX
-                }
+                variables: { input }
             });
 
-            alert("Profile updated successfully!");
+            alert("Profile Updated Successfully!");
             navigateTo("Dashboard");
 
         } catch (e) {
-            console.log("SAVE ERROR RAW →", JSON.stringify(e, null, 2));
-            alert("Failed to save: " + e?.errors?.[0]?.message || e.message);
+            console.error("SAVE ERROR:", JSON.stringify(e, null, 2));
+            alert("Failed to save: " + (e?.errors?.[0]?.message || e.message));
         } finally {
             setLoading(false);
         }
@@ -135,44 +132,40 @@ function CompleteProfileScreen({ navigateTo }) {
         <div className="form-container" style={{ maxWidth: '500px' }}>
             <h2>Edit Profile</h2>
 
-            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-                <label style={{ display: 'block', fontWeight: 'bold' }}>
-                    Profile Picture
-                </label>
+            <div style={{ marginBottom: 20 }}>
+                <label style={{ fontWeight: 'bold' }}>Profile Picture</label>
                 <input type="file" accept="image/*" onChange={handleFileChange} />
             </div>
 
             <label>Skills (Comma separated)</label>
             <input
                 type="text"
-                value={skills}
-                onChange={(e) => setSkills(e.target.value)}
                 className="input-field"
-                placeholder="React, Node, Design"
+                value={skills}
+                onChange={e => setSkills(e.target.value)}
             />
 
             <label>Interests (Comma separated)</label>
             <input
                 type="text"
-                value={interests}
-                onChange={(e) => setInterests(e.target.value)}
                 className="input-field"
-                placeholder="AI, Gaming"
+                value={interests}
+                onChange={e => setInterests(e.target.value)}
             />
 
             <label>Weekly Availability (Hours)</label>
             <input
                 type="number"
-                value={availabilityHours}
-                onChange={(e) => setAvailabilityHours(e.target.value)}
                 className="input-field"
+                value={availabilityHours}
+                onChange={e => setAvailabilityHours(e.target.value)}
             />
 
             <button
                 onClick={handleSave}
                 disabled={loading}
                 className="btn btn-primary"
-                style={{ width: '100%', marginTop: '15px' }}
+                style={{ width: '100%', marginTop: 15 }}
             >
                 {loading ? "Saving..." : "Save Profile"}
             </button>
@@ -180,7 +173,7 @@ function CompleteProfileScreen({ navigateTo }) {
             <button
                 onClick={() => navigateTo("Dashboard")}
                 className="btn"
-                style={{ width: '100%', marginTop: '10px', background: '#eee' }}
+                style={{ width: '100%', marginTop: 10, background: '#eee' }}
             >
                 Cancel
             </button>
