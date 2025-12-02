@@ -61,22 +61,22 @@ function CompleteProfileScreen({ navigateTo }) {
         setLoading(true);
         try {
             const { userId } = await getCurrentUser();
-            let profilePicKey = null;
+            let profilePicPath = null; // Changed from profilePicKey
 
-            // 1. Upload Image to S3 (if a file was selected)
+            // 1. Upload Image using PATH
             if (file) {
-                const fileName = `avatars/${userId}-${Date.now()}.png`;
+                // We use 'public/' so the path is standard and easy to read
+                const path = `public/avatars/${userId}-${Date.now()}.png`;
+                
                 const result = await uploadData({
-                    key: fileName,
-                    data: file,
-                    options: {
-                        accessLevel: 'protected' // Publicly readable (so others can see it)
-                    }
+                    path: path, // <--- NEW: Use path instead of key
+                    data: file
+                    // No 'options' needed for public path
                 }).result;
-                profilePicKey = result.key;
+                profilePicPath = result.path;
             }
 
-            // 2. Prepare Data for DB
+            // 2. Prepare Data
             const skillsArray = skills.split(',').map(s => s.trim()).filter(s => s);
             const interestsArray = interests.split(',').map(i => i.trim()).filter(i => i);
             
@@ -87,12 +87,11 @@ function CompleteProfileScreen({ navigateTo }) {
                 availability_hours: parseInt(availabilityHours) || 0
             };
 
-            // Only update profilePic if a new one was uploaded
-            if (profilePicKey) {
-                input.profilePic = profilePicKey;
+            // Save the full PATH to the database
+            if (profilePicPath) {
+                input.profilePic = profilePicPath;
             }
 
-            // 3. Save to DynamoDB
             await client.graphql({
                 query: updateUserMutation,
                 variables: { input }
@@ -106,6 +105,7 @@ function CompleteProfileScreen({ navigateTo }) {
         } finally { setLoading(false); }
     };
 
+            
     return (
         <div className="form-container" style={{maxWidth: '500px'}}>
             <h2>Edit Profile</h2>
