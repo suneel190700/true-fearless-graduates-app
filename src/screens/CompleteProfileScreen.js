@@ -70,7 +70,7 @@ function CompleteProfileScreen({ navigateTo }) {
                     key: fileName,
                     data: file,
                     options: {
-                        accessLevel: 'guest' // Publicly readable (so others can see it)
+                        accessLevel: 'protected' // Publicly readable (so others can see it)
                     }
                 }).result;
                 profilePicKey = result.key;

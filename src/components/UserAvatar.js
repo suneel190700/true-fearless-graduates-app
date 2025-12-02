@@ -4,11 +4,12 @@ import { getUrl } from 'aws-amplify/storage';
 const UserAvatar = ({ profilePicKey, name }) => {
     const [src, setSrc] = useState(null);
 
-    useEffect(() => {
-        if (profilePicKey) {
-            getUrl({ key: profilePicKey }).then(res => setSrc(res.url.toString()));
-        }
-    }, [profilePicKey]);
+    if (profilePicKey) {
+        getUrl({ 
+            key: profilePicKey,
+            options: { accessLevel: 'protected' } // <--- ADD THIS LINE
+        }).then(res => setSrc(res.url.toString()));
+    }
 
     const initial = name ? name.charAt(0).toUpperCase() : '?';
 
