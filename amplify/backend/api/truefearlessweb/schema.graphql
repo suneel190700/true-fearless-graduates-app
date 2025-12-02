@@ -11,6 +11,7 @@ type User @model @auth(rules: [{ allow: public }]) {
   # Connect User to their memberships
   groups: [GroupMember] @hasMany(indexName: "byUser", fields: ["id"])
   messages: [Message] @hasMany(indexName: "byUserMessages", fields: ["id"])
+  tasks: [Task] @hasMany(indexName: "byUserTasks", fields: ["id"])
 }
 
 type Group @model @auth(rules: [{ allow: public }]) {
