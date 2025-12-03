@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentUser } from 'aws-amplify/auth';
 
-// Screens
 import SignupScreen from './screens/SignupScreen';
 import LoginScreen from './screens/LoginScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
@@ -15,6 +14,8 @@ import ProfileViewerScreen from './screens/ProfileViewerScreen';
 import GroupTasksScreen from './screens/GroupTasksScreen';
 import AnalyticsScreen from './screens/AnalyticsScreen';
 
+import './App.css';
+
 function App() {
   const [currentScreen, setCurrentScreen] = useState('Login');
   const [routeParams, setRouteParams] = useState({});
@@ -25,14 +26,14 @@ function App() {
     setCurrentScreen(screenName);
   };
 
-  // 🔁 Refresh current user whenever the screen changes
+  // Refresh current user whenever the screen changes
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const current = await getCurrentUser();
         console.log('User is logged in:', current);
         setUser(current);
-      } catch (err) {
+      } catch {
         console.log('No user logged in');
         setUser(null);
       }
@@ -100,7 +101,6 @@ function App() {
       ScreenComponent = LoginScreen;
   }
 
-  // No sidebar for auth screens
   const isAuthScreen = currentScreen === 'Login' || currentScreen === 'Signup';
 
   if (isAuthScreen) {
