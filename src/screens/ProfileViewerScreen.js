@@ -2,10 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
 
-/* ================================
-   QUERY
-================================ */
-
 const getUserQuery = `
   query GetUser($id: ID!) {
     getUser(id: $id) {
@@ -18,10 +14,6 @@ const getUserQuery = `
     }
   }
 `;
-
-/* ================================
-   COMPONENT
-================================ */
 
 function ProfileViewerScreen({ navigateTo, route }) {
   const candidateId = route?.params?.candidateId;
@@ -82,7 +74,6 @@ function ProfileViewerScreen({ navigateTo, route }) {
 
   return (
     <div className="page">
-      {/* Header */}
       <div className="page-header">
         <div className="page-title-block">
           <div className="page-title">
@@ -104,7 +95,6 @@ function ProfileViewerScreen({ navigateTo, route }) {
         </div>
       </div>
 
-      {/* Content */}
       <div className="card-grid">
         <div className="card" style={{ maxWidth: 520 }}>
           <div className="card-header" style={{ marginBottom: 8 }}>
@@ -132,7 +122,6 @@ function ProfileViewerScreen({ navigateTo, route }) {
             </p>
           ) : (
             <>
-              {/* Basic info */}
               <div style={{ marginTop: 6, marginBottom: 10 }}>
                 <div
                   style={{
@@ -161,4 +150,74 @@ function ProfileViewerScreen({ navigateTo, route }) {
                 </div>
               </div>
 
-              {/* Skills*
+              <div style={{ marginTop: 8 }}>
+                <h3
+                  style={{
+                    borderBottom: '1px solid #eee',
+                    paddingBottom: '5px',
+                    marginTop: '10px',
+                    fontSize: '0.95rem',
+                  }}
+                >
+                  Skills
+                </h3>
+                <p
+                  style={{
+                    fontSize: '0.9rem',
+                    color: 'var(--text-main)',
+                  }}
+                >
+                  {skillsText}
+                </p>
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                <h3
+                  style={{
+                    borderBottom: '1px solid #eee',
+                    paddingBottom: '5px',
+                    marginTop: '10px',
+                    fontSize: '0.95rem',
+                  }}
+                >
+                  Interests
+                </h3>
+                <p
+                  style={{
+                    fontSize: '0.9rem',
+                    color: 'var(--text-main)',
+                  }}
+                >
+                  {interestsText}
+                </p>
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                <h3
+                  style={{
+                    borderBottom: '1px solid #eee',
+                    paddingBottom: '5px',
+                    marginTop: '10px',
+                    fontSize: '0.95rem',
+                  }}
+                >
+                  Availability
+                </h3>
+                <p
+                  style={{
+                    fontSize: '0.9rem',
+                    color: 'var(--text-main)',
+                  }}
+                >
+                  {availabilityText}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default ProfileViewerScreen;
