@@ -19,6 +19,9 @@ type Group @model @auth(rules: [{ allow: public }]) {
   description: String
   created_by: ID!
 
+  # NEW: tags for discoverability (e.g. "AI", "Web dev")
+  tags: [String]
+
   # Connect Group to its members
   members: [GroupMember] @hasMany(indexName: "byGroup", fields: ["id"])
 
@@ -26,6 +29,7 @@ type Group @model @auth(rules: [{ allow: public }]) {
   messages: [Message] @hasMany(indexName: "byGroupMessages", fields: ["id"])
   tasks: [Task] @hasMany(indexName: "byGroupTasks", fields: ["id"])
 }
+
 
 type GroupMember @model @auth(rules: [{ allow: public }]) {
   id: ID!
