@@ -31,16 +31,13 @@ function MatchScreen({ navigateTo }) {
         setError('');
         setLoading(true);
 
-        // 1. Current user
         const { userId } = await getCurrentUser();
         console.log('[Match] current userId:', userId);
 
-        // 2. Fetch all users
         const result = await client.graphql({ query: listUsersQuery });
         const allUsers = result?.data?.listUsers?.items || [];
         console.log('[Match] all users:', allUsers);
 
-        // 3. Find current user profile
         const currentUserProfile = allUsers.find((u) => u.id === userId);
         const candidates = allUsers.filter((u) => u.id !== userId);
 
@@ -50,7 +47,6 @@ function MatchScreen({ navigateTo }) {
           return;
         }
 
-        // 4. Calculate match scores
         const scores = getMatchScores(currentUserProfile, candidates);
         console.log('[Match] scores:', scores);
         setMatches(scores);
@@ -71,8 +67,7 @@ function MatchScreen({ navigateTo }) {
   };
 
   const handleConnect = (candidateId) => {
-    // You can later replace this with: create private chat, invite to group, etc.
-    alert('Connection request sent (demo). You can wire real logic here.');
+    navigateTo('ProfileViewer', { candidateId });
   };
 
   return (
@@ -135,7 +130,7 @@ function MatchScreen({ navigateTo }) {
           <div>
             <div className="card-title">Top matches</div>
             <div className="card-subtitle">
-              Click a name to view their profile or connect with them.
+              Click a name to view their profile and invite them to your group.
             </div>
           </div>
         </div>
@@ -261,7 +256,7 @@ function MatchScreen({ navigateTo }) {
                     className="btn btn-primary"
                     style={{ fontSize: '0.85rem', padding: '6px 14px' }}
                   >
-                    Connect
+                    View & Invite
                   </button>
                 </div>
               </div>
