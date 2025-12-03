@@ -15,62 +15,59 @@ import ProfileViewerScreen from './screens/ProfileViewerScreen';
 import GroupTasksScreen from './screens/GroupTasksScreen';
 import AnalyticsScreen from './screens/AnalyticsScreen';
 
-import './App.css';
-
 function App() {
-  const [screen, setScreen] = useState('Login');
+  const [currentScreen, setCurrentScreen] = useState('Login');
   const [routeParams, setRouteParams] = useState({});
-  const [currentUser, setCurrentUser] = useState(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [user, setUser] = useState(null);
 
-  // Simple navigation helper passed to all screens
-  const navigateTo = (name, params = {}) => {
-    setScreen(name);
-    setRouteParams(params || {});
+  const navigateTo = (screenName, params = {}) => {
+    setRouteParams(params);
+    setCurrentScreen(screenName);
   };
 
-  // On first load, check if user is already signed in
+  // 🔁 Refresh current user whenever the screen changes
   useEffect(() => {
-    const initAuth = async () => {
+    const fetchUser = async () => {
       try {
-        const user = await getCurrentUser();
-        console.log('User is logged in:', user);
-        setCurrentUser(user);
-        setScreen('Dashboard');
-      } catch (e) {
-        console.log('No existing session, staying on Login');
-        setCurrentUser(null);
-        setScreen('Login');
-      } finally {
-        setCheckingAuth(false);
+        const current = await getCurrentUser();
+        console.log('User is logged in:', current);
+        setUser(current);
+      } catch (err) {
+        console.log('No user logged in');
+        setUser(null);
       }
     };
 
-    initAuth();
-  }, []);
+    fetchUser();
+  }, [currentScreen]);
 
-  if (checkingAuth) {
+  const getDisplayEmail = () => {
+    if (!user) return 'Not signed in';
     return (
-      <div className="app-splash">
-        <div className="app-splash-card">
-          <div className="app-logo-circle">TF</div>
-          <p>Loading your workspace…</p>
-        </div>
-      </div>
+      user?.signInDetails?.loginId ||
+      user?.username ||
+      'Unknown user'
     );
-  }
+  };
 
-  // Choose which screen component to render
+  const getDisplayName = () => {
+    const email = getDisplayEmail();
+    if (!user || !email || email === 'Not signed in') return 'Guest';
+    const atIndex = email.indexOf('@');
+    return atIndex > 0 ? email.substring(0, atIndex) : email;
+  };
+
+  const displayName = getDisplayName();
+  const displayEmail = getDisplayEmail();
+  const userInitial = displayName.charAt(0).toUpperCase();
+
   let ScreenComponent;
-  switch (screen) {
-    case 'Signup':
-      ScreenComponent = SignupScreen;
-      break;
+  switch (currentScreen) {
     case 'Login':
       ScreenComponent = LoginScreen;
       break;
-    case 'CompleteProfile':
-      ScreenComponent = CompleteProfileScreen;
+    case 'Signup':
+      ScreenComponent = SignupScreen;
       break;
     case 'Dashboard':
       ScreenComponent = DashboardScreen;
@@ -84,114 +81,114 @@ function App() {
     case 'GroupChat':
       ScreenComponent = GroupChatScreen;
       break;
-    case 'Match':
+    case 'GroupTasks':
+      ScreenComponent = GroupTasksScreen;
+      break;
+    case 'MatchScreen':
       ScreenComponent = MatchScreen;
       break;
     case 'ProfileViewer':
       ScreenComponent = ProfileViewerScreen;
       break;
-    case 'GroupTasks':
-      ScreenComponent = GroupTasksScreen;
-      break;
     case 'Analytics':
       ScreenComponent = AnalyticsScreen;
+      break;
+    case 'CompleteProfile':
+      ScreenComponent = CompleteProfileScreen;
       break;
     default:
       ScreenComponent = LoginScreen;
   }
 
-  const isAuthScreen = screen === 'Login' || screen === 'Signup';
+  // No sidebar for auth screens
+  const isAuthScreen = currentScreen === 'Login' || currentScreen === 'Signup';
+
+  if (isAuthScreen) {
+    return (
+      <div className="App auth-shell">
+        <ScreenComponent
+          navigateTo={navigateTo}
+          route={{ params: routeParams }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="App">
-      {isAuthScreen ? (
-        // Centered card layout for Login / Signup
-        <div className="auth-shell">
-          <ScreenComponent
-            navigateTo={navigateTo}
-            route={{ params: routeParams }}
-          />
+    <div className="App app-shell">
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo-circle">TF</div>
+          <div className="sidebar-logo-text">
+            <div className="sidebar-logo-title">TrueFearless</div>
+            <div className="sidebar-logo-subtitle">Student Hub</div>
+          </div>
         </div>
-      ) : (
-        // Main app shell with sidebar + content
-        <div className="app-shell">
-          <aside className="sidebar">
-            <div className="sidebar-header">
-              <div className="app-logo-circle small">TF</div>
-              <div>
-                <div className="sidebar-title">TrueFearless</div>
-                <div className="sidebar-subtitle">Student Hub</div>
-              </div>
-            </div>
 
-            <nav className="sidebar-nav">
-              <button
-                className={`sidebar-link ${
-                  screen === 'Dashboard' ? 'active' : ''
-                }`}
-                onClick={() => navigateTo('Dashboard')}
-              >
-                🏠 Dashboard
-              </button>
-              <button
-                className={`sidebar-link ${
-                  screen === 'CreateGroup' ? 'active' : ''
-                }`}
-                onClick={() => navigateTo('CreateGroup')}
-              >
-                ➕ Create Group
-              </button>
-              <button
-                className={`sidebar-link ${
-                  screen === 'Match' ? 'active' : ''
-                }`}
-                onClick={() => navigateTo('Match')}
-              >
-                🤝 Matching
-              </button>
-              <button
-                className={`sidebar-link ${
-                  screen === 'Analytics' ? 'active' : ''
-                }`}
-                onClick={() => navigateTo('Analytics')}
-              >
-                📊 Analytics
-              </button>
-            </nav>
+        <nav className="sidebar-nav">
+          <button
+            type="button"
+            className={currentScreen === 'Dashboard' ? 'nav-item active' : 'nav-item'}
+            onClick={() => navigateTo('Dashboard')}
+          >
+            <span role="img" aria-label="dashboard">🏠</span>
+            <span>Dashboard</span>
+          </button>
 
-            <div className="sidebar-footer">
-              {currentUser && (
-                <div className="user-pill">
-                  <div className="user-avatar">
-                    {currentUser?.username?.[0]?.toUpperCase() || 'U'}
-                  </div>
-                  <div className="user-meta">
-                    <div className="user-name">
-                      {currentUser?.username?.split('@')[0]}
-                    </div>
-                    <div className="user-email">
-                      {currentUser?.username}
-                    </div>
-                  </div>
-                </div>
-              )}
-              <button
-                className="sidebar-link subtle"
-                onClick={() => navigateTo('CompleteProfile')}
-              >
-                ✏️ Edit Profile
-              </button>
-            </div>
-          </aside>
+          <button
+            type="button"
+            className={currentScreen === 'CreateGroup' ? 'nav-item active' : 'nav-item'}
+            onClick={() => navigateTo('CreateGroup')}
+          >
+            <span role="img" aria-label="group">📂</span>
+            <span>Create Group</span>
+          </button>
 
-          <main className="main-content">
-            <ScreenComponent
-              navigateTo={navigateTo}
-              route={{ params: routeParams }}
-            />
-          </main>
+          <button
+            type="button"
+            className={currentScreen === 'MatchScreen' ? 'nav-item active' : 'nav-item'}
+            onClick={() => navigateTo('MatchScreen')}
+          >
+            <span role="img" aria-label="match">🤝</span>
+            <span>Matching</span>
+          </button>
+
+          <button
+            type="button"
+            className={currentScreen === 'Analytics' ? 'nav-item active' : 'nav-item'}
+            onClick={() => navigateTo('Analytics')}
+          >
+            <span role="img" aria-label="analytics">📊</span>
+            <span>Analytics</span>
+          </button>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-user-avatar">
+            <span>{userInitial}</span>
+          </div>
+          <div className="sidebar-user-text">
+            <div className="sidebar-user-name">{displayName}</div>
+            <div className="sidebar-user-email">{displayEmail}</div>
+          </div>
+          <button
+            type="button"
+            className="sidebar-edit-profile"
+            onClick={() => navigateTo('CompleteProfile')}
+          >
+            ✏️ Edit Profile
+          </button>
         </div>
-      )}
+      </aside>
+
+      {/* Main content */}
+      <main className="main-content">
+        <ScreenComponent
+          navigateTo={navigateTo}
+          route={{ params: routeParams }}
+        />
+      </main>
     </div>
   );
 }
