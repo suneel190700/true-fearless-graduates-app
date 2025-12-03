@@ -227,6 +227,88 @@ function GroupTasksScreen({ navigateTo, route }) {
     return { ...base, background: '#fee2e2', color: '#b91c1c' }; // todo
   };
 
+  const tasksByStatus = {
+    todo: tasks.filter((t) => (t.status || 'todo') === 'todo'),
+    inProgress: tasks.filter((t) => t.status === 'in-progress'),
+    done: tasks.filter((t) => t.status === 'done'),
+  };
+
+  const renderTaskCard = (task) => (
+    <div
+      key={task.id}
+      style={{
+        padding: '8px 10px',
+        borderRadius: 10,
+        border: '1px solid var(--border-subtle)',
+        background: '#ffffff',
+        marginBottom: 6,
+        boxShadow: '0 4px 10px rgba(15,23,42,0.06)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 8,
+          marginBottom: 4,
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 500,
+            fontSize: '0.9rem',
+            textDecoration: task.status === 'done' ? 'line-through' : 'none',
+          }}
+        >
+          {task.title}
+        </span>
+        <span style={statusBadgeStyle(task.status || 'todo')}>
+          {task.status || 'todo'}
+        </span>
+      </div>
+      {task.description && (
+        <div
+          style={{
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+            marginBottom: 6,
+          }}
+        >
+          {task.description}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => toggleTaskStatus(task)}
+          style={{
+            background: '#eff6ff',
+            color: '#1d4ed8',
+            fontSize: '0.78rem',
+            paddingInline: 10,
+          }}
+        >
+          Next status
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => handleDeleteTask(task.id)}
+          style={{
+            background: '#fee2e2',
+            color: '#b91c1c',
+            fontSize: '0.78rem',
+            paddingInline: 10,
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="page">
       {/* Header */}
@@ -234,7 +316,7 @@ function GroupTasksScreen({ navigateTo, route }) {
         <div className="page-title-block">
           <div className="page-title">Tasks · {groupTitle}</div>
           <div className="page-subtitle">
-            Track work items for this group and keep everyone aligned.
+            Kanban-style board: move work from Todo → In progress → Done.
           </div>
         </div>
         <div className="page-actions">
@@ -296,129 +378,124 @@ function GroupTasksScreen({ navigateTo, route }) {
         </form>
       </div>
 
-      {/* Tasks list card */}
-      <div className="card">
-        <div className="card-header" style={{ marginBottom: 6 }}>
-          <div>
-            <div className="card-title">Task list</div>
-            <div className="card-subtitle">
-              Click status to cycle through Todo → In progress → Done.
+      {/* Kanban Board */}
+      <div className="card-grid">
+        {/* Todo column */}
+        <div className="card">
+          <div className="card-header" style={{ marginBottom: 6 }}>
+            <div>
+              <div className="card-title">Todo</div>
+              <div className="card-subtitle">
+                Backlog items waiting to be picked up.
+              </div>
+            </div>
+            <div className="badge">
+              {tasksByStatus.todo.length} item
+              {tasksByStatus.todo.length === 1 ? '' : 's'}
             </div>
           </div>
+          {loading ? (
+            <p
+              style={{
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                marginTop: 12,
+              }}
+            >
+              Loading tasks…
+            </p>
+          ) : tasksByStatus.todo.length === 0 ? (
+            <p
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--text-muted)',
+                marginTop: 6,
+              }}
+            >
+              Nothing in Todo. Add a task above.
+            </p>
+          ) : (
+            tasksByStatus.todo.map(renderTaskCard)
+          )}
         </div>
 
-        {loading ? (
-          <p
-            style={{
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              marginTop: 18,
-            }}
-          >
-            Loading tasks…
-          </p>
-        ) : tasks.length === 0 ? (
-          <p
-            style={{
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              marginTop: 18,
-            }}
-          >
-            No tasks yet. Start by adding your first one above.
-          </p>
-        ) : (
-          <div
-            style={{
-              marginTop: 6,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            }}
-          >
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 10px',
-                  borderRadius: 10,
-                  border: '1px solid var(--border-subtle)',
-                  background:
-                    task.status === 'done'
-                      ? '#f9fafb'
-                      : '#ffffff',
-                }}
-              >
-                <div style={{ maxWidth: '70%' }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      marginBottom: 2,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontWeight: 500,
-                        fontSize: '0.95rem',
-                        textDecoration:
-                          task.status === 'done' ? 'line-through' : 'none',
-                      }}
-                    >
-                      {task.title}
-                    </span>
-                    <span style={statusBadgeStyle(task.status)}>
-                      {task.status || 'todo'}
-                    </span>
-                  </div>
-                  {task.description && (
-                    <div
-                      style={{
-                        fontSize: '0.8rem',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      {task.description}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => toggleTaskStatus(task)}
-                    style={{
-                      background: '#eff6ff',
-                      color: '#1d4ed8',
-                      fontSize: '0.8rem',
-                      paddingInline: 10,
-                    }}
-                  >
-                    Update status
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => handleDeleteTask(task.id)}
-                    style={{
-                      background: '#fee2e2',
-                      color: '#b91c1c',
-                      fontSize: '0.8rem',
-                      paddingInline: 10,
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
+        {/* In-progress column */}
+        <div className="card">
+          <div className="card-header" style={{ marginBottom: 6 }}>
+            <div>
+              <div className="card-title">In progress</div>
+              <div className="card-subtitle">
+                Work currently being done.
               </div>
-            ))}
+            </div>
+            <div className="badge">
+              {tasksByStatus.inProgress.length} item
+              {tasksByStatus.inProgress.length === 1 ? '' : 's'}
+            </div>
           </div>
-        )}
+          {loading ? (
+            <p
+              style={{
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                marginTop: 12,
+              }}
+            >
+              Loading tasks…
+            </p>
+          ) : tasksByStatus.inProgress.length === 0 ? (
+            <p
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--text-muted)',
+                marginTop: 6,
+              }}
+            >
+              No tasks in progress yet.
+            </p>
+          ) : (
+            tasksByStatus.inProgress.map(renderTaskCard)
+          )}
+        </div>
+
+        {/* Done column */}
+        <div className="card">
+          <div className="card-header" style={{ marginBottom: 6 }}>
+            <div>
+              <div className="card-title">Done</div>
+              <div className="card-subtitle">
+                Completed work, nice job.
+              </div>
+            </div>
+            <div className="badge">
+              {tasksByStatus.done.length} item
+              {tasksByStatus.done.length === 1 ? '' : 's'}
+            </div>
+          </div>
+          {loading ? (
+            <p
+              style={{
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                marginTop: 12,
+              }}
+            >
+              Loading tasks…
+            </p>
+          ) : tasksByStatus.done.length === 0 ? (
+            <p
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--text-muted)',
+                marginTop: 6,
+              }}
+            >
+              Nothing completed yet. You got this 💪
+            </p>
+          ) : (
+            tasksByStatus.done.map(renderTaskCard)
+          )}
+        </div>
       </div>
     </div>
   );
