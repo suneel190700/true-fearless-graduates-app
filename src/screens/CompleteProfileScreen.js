@@ -2,19 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
-import { uploadData } from 'aws-amplify/storage';
+import { uploadData } from 'aws-amplify/storage'; // For profile picture upload
 
-/* ================================
-   QUERIES & MUTATIONS
-================================ */
-
+// Fetch minimal user profile
 const getUserQuery = `
   query GetUser($id: ID!) {
     getUser(id: $id) {
       id
-      email
-      full_name
-      role
       skills
       interests
       availability_hours
@@ -23,30 +17,48 @@ const getUserQuery = `
   }
 `;
 
+// Update user profile
 const updateUserMutation = `
   mutation UpdateUser($input: UpdateUserInput!) {
     updateUser(input: $input) {
       id
-      email
-      full_name
-      role
-      skills
-      interests
-      availability_hours
       profilePic
     }
   }
 `;
 
-/* ================================
-   COMPONENT
-================================ */
+// Helper to compute profile completeness based on the fields we control here
+function computeProfileCompleteness({ skills, interests, availabilityHours, profilePic }) {
+  let total = 4;
+  let score = 0;
+
+  const hasSkills = Array.isArray(skills)
+    ? skills.length > 0
+    : typeof skills === 'string' && skills.trim().length > 0;
+
+  const hasInterests = Array.isArray(interests)
+    ? interests.length > 0
+    : typeof interests === 'string' && interests.trim().length > 0;
+
+  const hoursNum = parseInt(availabilityHours, 10);
+  const hasAvailability = !isNaN(hoursNum) && hoursNum > 0;
+
+  const hasPic = !!profilePic;
+
+  if (hasSkills) score++;
+  if (hasInterests) score++;
+  if (hasAvailability) score++;
+  if (hasPic) score++;
+
+  return Math.round((score / total) * 100);
+}
 
 function CompleteProfileScreen({ navigateTo }) {
   const [skills, setSkills] = useState('');
   const [interests, setInterests] = useState('');
   const [availabilityHours, setAvailabilityHours] = useState('');
-  const [file, setFile] = useState(null);
+  const [file, setFile] = useState(null); // Selected file for upload
+  const [profilePic, setProfilePic] = useState(null); // Existing pic path from DB
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -54,234 +66,271 @@ function CompleteProfileScreen({ navigateTo }) {
 
   const client = generateClient();
 
-  /* Helpers */
-
-  const normalizeToString = (val) => {
-    if (!val) return '';
-    if (Array.isArray(val)) return val.join(', ');
-    if (typeof val === 'string') return val;
-    return '';
-  };
-
-  const normalizeToArray = (val) => {
-    if (!val) return null;
-    if (Array.isArray(val)) return val.length ? val : null;
-
-    if (typeof val === 'string') {
-      const arr = val
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return arr.length ? arr : null;
-    }
-
-    return null;
-  };
-
-  /* Load existing profile */
-
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        setLoadError('');
-        const { userId } = await getCurrentUser();
-        console.log('[CompleteProfile] current userId:', userId);
-
-        const result = await client.graphql({
-          query: getUserQuery,
-          variables: { id: userId },
-        });
-
-        console.log('[CompleteProfile] getUser result:', result);
-
-        const user = result?.data?.getUser;
-        if (!user) {
-          console.warn(
-            '[CompleteProfile] No User record found for this id. Make sure createUser ran at signup.'
-          );
-          return;
-        }
-
-        setSkills(normalizeToString(user.skills));
-        setInterests(normalizeToString(user.interests));
-        setAvailabilityHours(
-          user.availability_hours != null ? String(user.availability_hours) : ''
-        );
-      } catch (e) {
-        console.error('[CompleteProfile] Error loading profile:', e);
-        setLoadError('Failed to load your profile. You can still try saving changes.');
-      }
-    };
-
     loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleFileChange = (e) => {
-    const selected = e.target.files?.[0];
-    if (selected) setFile(selected);
+  const loadProfile = async () => {
+    try {
+      setLoadError('');
+      const { userId } = await getCurrentUser();
+      const result = await client.graphql({
+        query: getUserQuery,
+        variables: { id: userId },
+      });
+
+      const data = result?.data?.getUser;
+      if (data) {
+        if (data.skills) setSkills(data.skills.join(', '));
+        if (data.interests) setInterests(data.interests.join(', '));
+        if (data.availability_hours != null) {
+          setAvailabilityHours(String(data.availability_hours));
+        }
+        if (data.profilePic) setProfilePic(data.profilePic);
+      }
+    } catch (e) {
+      console.error('[CompleteProfile] loadProfile error:', e);
+      setLoadError('Failed to load your profile. You can still fill it in and save.');
+    }
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaveError('');
-    setLoading(true);
+  const handleFileChange = (event) => {
+    const selected = event.target.files[0];
+    if (selected) {
+      setFile(selected);
+    }
+  };
 
+  const handleSave = async () => {
+    setLoading(true);
+    setSaveError('');
     try {
       const { userId } = await getCurrentUser();
-      console.log('[CompleteProfile] saving for userId:', userId);
+      let profilePicPath = profilePic || null; // start with existing path
 
-      let profilePicPath = null;
-
+      // 1. If a new file is selected, upload it and get its path
       if (file) {
         const path = `public/avatars/${userId}-${Date.now()}.png`;
-        const uploadResult = await uploadData({
-          path,
+
+        const result = await uploadData({
+          path: path,
           data: file,
         }).result;
 
-        profilePicPath = uploadResult.path;
-        console.log('[CompleteProfile] uploaded profile pic path:', profilePicPath);
+        profilePicPath = result.path;
       }
 
-      const skillsArray = normalizeToArray(skills);
-      const interestsArray = normalizeToArray(interests);
+      // 2. Prepare input data
+      const skillsArray = skills
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s);
 
-      const input = { id: userId };
+      const interestsArray = interests
+        .split(',')
+        .map((i) => i.trim())
+        .filter((i) => i);
 
-      if (skillsArray) input.skills = skillsArray;
-      if (interestsArray) input.interests = interestsArray;
-
-      if (availabilityHours !== '') {
-        const parsed = parseInt(availabilityHours, 10);
-        if (!Number.isNaN(parsed)) {
-          input.availability_hours = parsed;
-        }
-      }
+      const input = {
+        id: userId,
+        skills: skillsArray,
+        interests: interestsArray,
+        availability_hours: parseInt(availabilityHours, 10) || 0,
+      };
 
       if (profilePicPath) {
         input.profilePic = profilePicPath;
       }
 
-      console.log('[CompleteProfile] updateUser input:', input);
-
-      const updateResult = await client.graphql({
+      // 3. Save via updateUser
+      await client.graphql({
         query: updateUserMutation,
         variables: { input },
       });
 
-      console.log('[CompleteProfile] updateUser result:', updateResult);
-
       alert('Profile updated successfully!');
       navigateTo('Dashboard');
     } catch (e) {
-      console.error('[CompleteProfile] SAVE ERROR →', JSON.stringify(e, null, 2));
-      setSaveError(e?.errors?.[0]?.message || e.message || 'Failed to save changes.');
+      console.error('[CompleteProfile] Save Error →', e);
+      const msg =
+        e?.errors?.[0]?.message || e.message || 'Failed to save profile.';
+      setSaveError(msg);
+      alert('Failed to save: ' + msg);
     } finally {
       setLoading(false);
     }
   };
 
+  // Compute completeness dynamically from the current form state
+  const completion = computeProfileCompleteness({
+    skills,
+    interests,
+    availabilityHours,
+    profilePic,
+  });
+
+  let completionLabel = '';
+  if (completion < 50) {
+    completionLabel = 'Let’s get the basics in place.';
+  } else if (completion < 100) {
+    completionLabel = 'Looking good! A few more details to reach 100%.';
+  } else {
+    completionLabel = 'Nice! Your profile is complete and match-ready.';
+  }
+
   return (
-    <div className="page">
-      <div className="page-header">
-        <div className="page-title-block">
-          <div className="page-title">Edit Profile</div>
-          <div className="page-subtitle">
-            Tell others what you’re good at and how much time you can contribute each week.
-          </div>
+    <div className="form-container" style={{ maxWidth: '500px' }}>
+      <button
+        type="button"
+        className="btn"
+        style={{ marginBottom: 10, background: '#f3f4f6', color: '#111827' }}
+        onClick={() => navigateTo('Dashboard')}
+      >
+        ← Back
+      </button>
+
+      <h2>Edit Profile</h2>
+
+      {/* Profile completeness bar */}
+      <div
+        style={{
+          marginTop: 10,
+          marginBottom: 20,
+          padding: '10px 12px',
+          borderRadius: 12,
+          background: '#f9fafb',
+          border: '1px solid #e5e7eb',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: 6,
+            fontSize: '0.85rem',
+            fontWeight: 500,
+          }}
+        >
+          <span>Profile completeness</span>
+          <span>{completion}%</span>
         </div>
-        <div className="page-actions">
-          <button
-            type="button"
-            className="btn"
-            style={{ background: '#f3f4f6', color: '#111827' }}
-            onClick={() => navigateTo('Dashboard')}
+        <div
+          style={{
+            width: '100%',
+            height: 8,
+            borderRadius: 999,
+            background: '#e5e7eb',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: `${completion}%`,
+              height: '100%',
+              background:
+                completion === 100 ? '#16a34a' : 'var(--primary, #2563eb)',
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </div>
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {completionLabel}
+        </div>
+      </div>
+
+      {loadError && (
+        <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
+          {loadError}
+        </p>
+      )}
+
+      {/* Profile picture */}
+      <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '10px',
+            fontWeight: 'bold',
+          }}
+        >
+          Profile Picture
+        </label>
+        <input type="file" accept="image/*" onChange={handleFileChange} />
+        {profilePic && (
+          <p
+            style={{
+              fontSize: '0.8rem',
+              color: 'var(--text-muted)',
+              marginTop: 6,
+            }}
           >
-            ← Back to Dashboard
-          </button>
-        </div>
+            Existing picture saved. Uploading a new one will replace it.
+          </p>
+        )}
       </div>
 
-      <div className="card-grid">
-        <div className="card">
-          <div className="card-header" style={{ marginBottom: 10 }}>
-            <div>
-              <div className="card-title">Profile details</div>
-              <div className="card-subtitle">
-                Skills, interests, and availability help us match you to the right groups.
-              </div>
-            </div>
-          </div>
+      {/* Skills */}
+      <label>Skills (Comma separated)</label>
+      <input
+        type="text"
+        value={skills}
+        onChange={(e) => setSkills(e.target.value)}
+        className="input-field"
+        placeholder="React, Node, Design"
+      />
 
-          {loadError && (
-            <p style={{ color: 'var(--danger)', fontSize: '0.85rem', marginBottom: 8 }}>
-              {loadError}
-            </p>
-          )}
+      {/* Interests */}
+      <label>Interests (Comma separated)</label>
+      <input
+        type="text"
+        value={interests}
+        onChange={(e) => setInterests(e.target.value)}
+        className="input-field"
+        placeholder="AI, Gaming"
+      />
 
-          <form onSubmit={handleSave}>
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontWeight: 500 }}>Profile picture</label>
-              <div style={{ marginTop: 6 }}>
-                <input type="file" accept="image/*" onChange={handleFileChange} />
-              </div>
-              <p className="text-muted" style={{ marginTop: 4 }}>
-                PNG or JPG, square works best.
-              </p>
-            </div>
+      {/* Availability */}
+      <label>Weekly Availability (Hours)</label>
+      <input
+        type="number"
+        value={availabilityHours}
+        onChange={(e) => setAvailabilityHours(e.target.value)}
+        className="input-field"
+      />
 
-            <label style={{ fontWeight: 500 }}>Skills</label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="React, Node, Data Analysis"
-              value={skills}
-              onChange={(e) => setSkills(e.target.value)}
-            />
-            <p className="text-muted" style={{ marginTop: -12, marginBottom: 10 }}>
-              Separate multiple skills with commas.
-            </p>
+      {saveError && (
+        <p style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 8 }}>
+          {saveError}
+        </p>
+      )}
 
-            <label style={{ fontWeight: 500 }}>Interests</label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="AI, Hackathons, Open Source"
-              value={interests}
-              onChange={(e) => setInterests(e.target.value)}
-            />
-            <p className="text-muted" style={{ marginTop: -12, marginBottom: 10 }}>
-              What topics excite you? Use commas to add multiple.
-            </p>
-
-            <label style={{ fontWeight: 500 }}>Weekly availability (hours)</label>
-            <input
-              type="number"
-              className="input-field"
-              placeholder="e.g. 5"
-              value={availabilityHours}
-              onChange={(e) => setAvailabilityHours(e.target.value)}
-              min="0"
-            />
-
-            {saveError && (
-              <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
-                {saveError}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: 10 }}
-              disabled={loading}
-            >
-              {loading ? 'Saving…' : 'Save Profile'}
-            </button>
-          </form>
-        </div>
-      </div>
+      <button
+        onClick={handleSave}
+        disabled={loading}
+        className="btn btn-primary"
+        style={{ width: '100%', marginTop: '15px' }}
+      >
+        {loading ? 'Saving...' : 'Save Profile'}
+      </button>
+      <button
+        onClick={() => navigateTo('Dashboard')}
+        className="btn"
+        style={{
+          width: '100%',
+          marginTop: '10px',
+          background: '#eee',
+          color: 'black',
+        }}
+      >
+        Cancel
+      </button>
     </div>
   );
 }
