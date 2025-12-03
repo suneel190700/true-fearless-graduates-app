@@ -53,10 +53,12 @@ function GroupChatScreen({ navigateTo, route }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
 
+  // Key used to detect "@you"
+  const [mentionKey, setMentionKey] = useState('');
+
   const client = generateClient();
   const messagesEndRef = useRef(null);
 
-  // Scroll to bottom when messages change
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -72,6 +74,17 @@ function GroupChatScreen({ navigateTo, route }) {
         const user = await getCurrentUser();
         console.log('[GroupChat] currentUser:', user);
         setCurrentUser(user);
+
+        // Build mentionKey from email or username: "@suneel.kalva19"
+        const email =
+          user?.signInDetails?.loginId ||
+          user?.username ||
+          '';
+        const atIndex = email.indexOf('@');
+        if (atIndex > 0) {
+          const handle = email.slice(0, atIndex);
+          setMentionKey(`@${handle}`);
+        }
 
         await fetchMessages();
       } catch (e) {
@@ -100,7 +113,6 @@ function GroupChatScreen({ navigateTo, route }) {
       });
 
       const items = result?.data?.listMessages?.items || [];
-      // Sort by createdAt ascending
       items.sort((a, b) => {
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -138,7 +150,6 @@ function GroupChatScreen({ navigateTo, route }) {
       const created = result?.data?.createMessage;
       console.log('[GroupChat] created message:', created);
 
-      // Optimistically append the new message
       setMessages((prev) => {
         const next = [...prev, created].sort((a, b) => {
           const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -164,6 +175,37 @@ function GroupChatScreen({ navigateTo, route }) {
     }
   };
 
+  // 🔍 Highlight @mentions in message text
+  const renderMessageContent = (text) => {
+    if (!text) return null;
+
+    // Split by tokens that start with "@"
+    const parts = text.split(/(\@[^\s]+)/g);
+
+    return parts.map((part, idx) => {
+      if (part.startsWith('@')) {
+        const isMeMention =
+          mentionKey &&
+          part.toLowerCase() === mentionKey.toLowerCase();
+
+        return (
+          <span
+            key={idx}
+            style={{
+              fontWeight: 600,
+              color: isMeMention ? '#b91c1c' : '#1d4ed8',
+              backgroundColor: isMeMention ? '#fef2f2' : 'transparent',
+            }}
+          >
+            {part}
+          </span>
+        );
+      }
+
+      return <span key={idx}>{part}</span>;
+    });
+  };
+
   return (
     <div className="page">
       {/* Header */}
@@ -171,7 +213,11 @@ function GroupChatScreen({ navigateTo, route }) {
         <div className="page-title-block">
           <div className="page-title">Chat · {groupTitle}</div>
           <div className="page-subtitle">
-            Real-time conversation space for this group.
+            Real-time conversation space for this group. Use
+            {' '}
+            <strong>@handle</strong>
+            {' '}
+            to mention someone.
           </div>
         </div>
         <div className="page-actions">
@@ -279,7 +325,9 @@ function GroupChatScreen({ navigateTo, route }) {
                         </span>
                       )}
                     </div>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                      {renderMessageContent(msg.content)}
+                    </div>
                   </div>
                 </div>
               );
@@ -320,7 +368,7 @@ function GroupChatScreen({ navigateTo, route }) {
               resize: 'none',
               flex: 1,
             }}
-            placeholder="Type a message…"
+            placeholder="Type a message… (use @handle to mention someone)"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
