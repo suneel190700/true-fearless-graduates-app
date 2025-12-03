@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { signUp, confirmSignUp } from 'aws-amplify/auth';
+import { signUp, confirmSignUp, signIn, getCurrentUser } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 
-// Definition of the GraphQL Mutation to create a user in the database
+// GraphQL Mutation to create a user in DynamoDB
 const createUserMutation = `
   mutation CreateUser($input: CreateUserInput!) {
     createUser(input: $input) {
@@ -15,169 +15,183 @@ const createUserMutation = `
 `;
 
 function SignupScreen({ navigateTo }) {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
-    const [verificationCode, setVerificationCode] = useState('');
-    
-    // "step" controls which form we see: 1 = Signup, 2 = Verify Email
-    const [step, setStep] = useState(1); 
-    const [error, setError] = useState(null);
-    const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
 
-    const client = generateClient();
+  // step: 1 = signup form, 2 = verify code
+  const [step, setStep] = useState(1);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-    // STEP 1: Register User with AWS Cognito
-    const handleSignup = async () => {
-        if (!email || !password || !fullName) {
-            setError("Please fill in all fields.");
-            return;
-        }
+  const client = generateClient();
 
-        setError(null);
-        setLoading(true);
+  // STEP 1: Register user in Cognito
+  const handleSignup = async () => {
+    if (!email || !password || !fullName) {
+      setError('Please fill in all fields.');
+      return;
+    }
 
-        try {
-            const { userId } = await signUp({
-                username: email,
-                password,
-                options: {
-                    userAttributes: {
-                        email,
-                        name: fullName, // Optional, but good practice
-                    },
-                }
-            });
+    setError(null);
+    setLoading(true);
 
-            console.log("Signup success, user ID:", userId);
-            setStep(2); // Move to Verification Step
-        } catch (e) {
-            console.error("Signup error:", e);
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+    try {
+      const { userId } = await signUp({
+        username: email,
+        password,
+        options: {
+          userAttributes: {
+            email,
+            name: fullName,
+          },
+        },
+      });
 
-    // STEP 2: Confirm Email Code & Create DB Entry
-    const handleVerification = async () => {
-        if (!verificationCode) {
-            setError("Please enter the code from your email.");
-            return;
-        }
+      console.log('Signup success, user ID (Cognito):', userId);
+      setStep(2);
+    } catch (e) {
+      console.error('Signup error:', e);
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        setError(null);
-        setLoading(true);
+  // STEP 2: Confirm email, then create User row in DynamoDB **with id = Cognito userId**
+  const handleVerification = async () => {
+    if (!verificationCode) {
+      setError('Please enter the code from your email.');
+      return;
+    }
 
-        try {
-            // A. Confirm with Cognito
-            await confirmSignUp({
-                username: email,
-                confirmationCode: verificationCode
-            });
+    setError(null);
+    setLoading(true);
 
-            // B. Create User Profile in DynamoDB (Using the GraphQL API)
-            // We need this so you can store skills, interests, etc. later.
-            await client.graphql({
-                query: createUserMutation,
-                variables: {
-                    input: {
-                        email: email,
-                        full_name: fullName,
-                        role: 'student' // Default role
-                    }
-                }
-            });
+    try {
+      // A. Confirm with Cognito
+      await confirmSignUp({
+        username: email,
+        confirmationCode: verificationCode,
+      });
 
-            alert("Account verified! You can now log in.");
-            navigateTo('Login');
+      // B. Sign the user in so we can get userId (Cognito sub)
+      await signIn({
+        username: email,
+        password,
+      });
 
-        } catch (e) {
-            console.error("Verification error:", e);
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+      const { userId } = await getCurrentUser(); // 👈 this is the ID we will use as DynamoDB PK
+      console.log('Confirmed + signed in. Cognito userId:', userId);
 
-    return (
-        <div className="form-container">
-            <h2>{step === 1 ? "Create Enterprise Account" : "Verify Your Email"}</h2>
+      // C. Create User profile row in DynamoDB, with id = userId
+      await client.graphql({
+        query: createUserMutation,
+        variables: {
+          input: {
+            id: userId,         // 👈 KEY POINT
+            email: email,
+            full_name: fullName,
+            role: 'student',
+          },
+        },
+      });
 
-            {step === 1 && (
-                <>
-                    <input
-                        type="text"
-                        placeholder="Full Name"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        className="input-field"
-                    />
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="input-field"
-                    />
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="input-field"
-                    />
-                </>
-            )}
+      alert('Account verified! You can now log in.');
+      navigateTo('Login');
+    } catch (e) {
+      console.error('Verification error:', e);
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            {step === 2 && (
-                <>
-                    <p style={{textAlign: 'center', fontSize: '0.9em'}}>
-                        We sent a code to <strong>{email}</strong>.
-                    </p>
-                    <input
-                        type="text"
-                        placeholder="Verification Code"
-                        value={verificationCode}
-                        onChange={(e) => setVerificationCode(e.target.value)}
-                        className="input-field"
-                    />
-                </>
-            )}
+  return (
+    <div className="form-container">
+      <h2>{step === 1 ? 'Create Enterprise Account' : 'Verify Your Email'}</h2>
 
-            {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      {step === 1 && (
+        <>
+          <input
+            type="text"
+            placeholder="Full Name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            className="input-field"
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input-field"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input-field"
+          />
+        </>
+      )}
 
-            {step === 1 ? (
-                <button
-                    onClick={handleSignup}
-                    disabled={loading}
-                    className="btn btn-primary"
-                    style={{ width: '100%', marginTop: '10px' }}
-                >
-                    {loading ? "Registering..." : "Sign Up"}
-                </button>
-            ) : (
-                <button
-                    onClick={handleVerification}
-                    disabled={loading}
-                    className="btn btn-primary"
-                    style={{ width: '100%', marginTop: '10px' }}
-                >
-                    {loading ? "Verifying..." : "Confirm Account"}
-                </button>
-            )}
+      {step === 2 && (
+        <>
+          <p style={{ textAlign: 'center', fontSize: '0.9em' }}>
+            We sent a code to <strong>{email}</strong>.
+          </p>
+          <input
+            type="text"
+            placeholder="Verification Code"
+            value={verificationCode}
+            onChange={(e) => setVerificationCode(e.target.value)}
+            className="input-field"
+          />
+        </>
+      )}
 
-            <p style={{ marginTop: '20px', textAlign: 'center' }}>
-                Already have an account? 
-                <button 
-                    onClick={() => navigateTo('Login')} 
-                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                    Log In
-                </button>
-            </p>
-        </div>
-    );
+      {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
+
+      {step === 1 ? (
+        <button
+          onClick={handleSignup}
+          disabled={loading}
+          className="btn btn-primary"
+          style={{ width: '100%', marginTop: '10px' }}
+        >
+          {loading ? 'Registering...' : 'Sign Up'}
+        </button>
+      ) : (
+        <button
+          onClick={handleVerification}
+          disabled={loading}
+          className="btn btn-primary"
+          style={{ width: '100%', marginTop: '10px' }}
+        >
+          {loading ? 'Verifying...' : 'Confirm Account'}
+        </button>
+      )}
+
+      <p style={{ marginTop: '20px', textAlign: 'center' }}>
+        Already have an account?
+        <button
+          onClick={() => navigateTo('Login')}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--color-primary)',
+            cursor: 'pointer',
+            textDecoration: 'underline',
+          }}
+        >
+          Log In
+        </button>
+      </p>
+    </div>
+  );
 }
 
 export default SignupScreen;
