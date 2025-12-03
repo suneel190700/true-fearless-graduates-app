@@ -32,9 +32,13 @@ type GroupMember @model @auth(rules: [{ allow: public }]) {
   groupID: ID! @index(name: "byGroup")
   userID: ID! @index(name: "byUser")
 
+  # NEW: role on the membership (owner, member, etc.)
+  role: String
+
   group: Group @belongsTo(fields: ["groupID"])
   user: User @belongsTo(fields: ["userID"])
 }
+
 
 type Message @model @auth(rules: [{ allow: public }]) {
   id: ID!
