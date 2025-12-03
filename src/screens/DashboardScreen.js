@@ -1,9 +1,9 @@
+// src/screens/DashboardScreen.js
 import React, { useState, useEffect } from 'react';
 import { signOut } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
-import { getUrl } from 'aws-amplify/storage';
 
-// GraphQL Query to list all groups
+// GraphQL Query to list all groups with members + tasks
 const listGroupsQuery = `
   query ListGroups {
     listGroups {
@@ -13,11 +13,19 @@ const listGroupsQuery = `
         description
         createdAt
         members {
-            items {
-                user {
-                    full_name
-                }
+          items {
+            user {
+              id
+              full_name
+              profilePic
             }
+          }
+        }
+        tasks {
+          items {
+            id
+            status
+          }
         }
       }
     }
@@ -25,129 +33,285 @@ const listGroupsQuery = `
 `;
 
 function DashboardScreen({ navigateTo }) {
-    const [groups, setGroups] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [avatarUrl, setAvatarUrl] = useState(null);
-    
-    // Default user state (We will update this later to fetch real profile)
-    const [user, setUser] = useState({ full_name: 'Student' }); 
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-    const client = generateClient();
+  const client = generateClient();
 
-    useEffect(() => {
-        fetchGroups();
-    }, []);
+  useEffect(() => {
+    fetchGroups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const fetchGroups = async () => {
-        try {
-            const groupData = await client.graphql({ query: listGroupsQuery });
-            const groupsList = groupData.data.listGroups.items;
-            setGroups(groupsList);
-        } catch (e) {
-            console.error("Error fetching groups:", e);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const fetchGroups = async () => {
+    try {
+      const groupData = await client.graphql({ query: listGroupsQuery });
+      const items = groupData?.data?.listGroups?.items || [];
+      setGroups(items);
+    } catch (e) {
+      console.error('Error fetching groups:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // --- UPDATED LOGOUT FUNCTION ---
-    const handleLogout = async () => {
-        try {
-            await signOut(); // Tell AWS to kill the session
-            navigateTo('Login'); // Go to Login screen immediately (No reload)
-        } catch (error) {
-            console.log('error signing out: ', error);
-            // If AWS fails, force the user to Login screen anyway
-            alert("Logout had an issue, but taking you to login.");
-            navigateTo('Login');
-        }
-    };
-    // -------------------------------
-    const loadAvatar = async (profilePicKey) => {
-        if (!profilePicKey) return;
-        try {
-            const link = await getUrl({ key: profilePicKey });
-            setAvatarUrl(link.url);
-        } catch (e) { console.log("No avatar found"); }
-    };
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigateTo('Login');
+    } catch (error) {
+      console.error('error signing out: ', error);
+      alert('Logout had an issue, but taking you to login.');
+      navigateTo('Login');
+    }
+  };
 
+  // Derived stats
+  const totalProjects = groups.length;
+  const totalMembers = groups.reduce((acc, g) => {
+    const count = g?.members?.items?.length || 0;
+    return acc + count;
+  }, 0);
+  const totalTasks = groups.reduce((acc, g) => {
+    const count = g?.tasks?.items?.length || 0;
+    return acc + count;
+  }, 0);
 
-
-    const filteredGroups = groups.filter(group => 
-        group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (group.description && group.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-
+  const filteredGroups = groups.filter((group) => {
+    const title = group.title || '';
+    const desc = group.description || '';
+    const q = searchTerm.toLowerCase();
     return (
-        <div className="app-container">
-            {/* Header Section */}
-            <header className="page-header">
-                <div>
-                    <h1 style={{ margin: 0, fontSize: '2rem' }}>Project Dashboard</h1>
-                    <p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Welcome back, {user.full_name}</p>
-                </div>
-                <button onClick={handleLogout} className="btn btn-danger">LOGOUT</button>
-            </header>
-
-            {/* Action Toolbar */}
-            <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <button onClick={() => navigateTo('CreateGroup')} className="btn btn-primary">
-                    + NEW PROJECT
-                </button>
-                <button onClick={() => navigateTo('MatchScreen')} className="btn btn-secondary">
-                    🔍 FIND TALENT
-                </button>
-                <button onClick={() => navigateTo('CompleteProfile')} className="btn btn-secondary">
-                    ✏️ EDIT PROFILE
-                </button>
-            </div>
-            
-            <input 
-                type="text" 
-                className="input-field" 
-                placeholder="Search projects..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ maxWidth: '300px', marginBottom: '20px' }}
-            />
-
-            {/* Content Area */}
-            {loading ? (
-                <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading projects...</p>
-            ) : (
-                <>
-                    {filteredGroups.length === 0 ? (
-                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '40px' }}>
-                            No active projects found. Start one today!
-                        </p>
-                    ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-                            {filteredGroups.map(group => (
-                                <div 
-                                    key={group.id} 
-                                    className="card" 
-                                    onClick={() => navigateTo('GroupDetails', { groupId: group.id })}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                        <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-accent)' }}>{group.title}</h3>
-                                        <span style={{ fontSize: '1.5rem', color: 'var(--text-muted)' }}>→</span>
-                                    </div>
-                                    <p style={{ color: 'var(--text-muted)', lineHeight: '1.5', height: '45px', overflow: 'hidden', margin: '0 0 15px 0' }}>
-                                        {group.description}
-                                    </p>
-                                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                        📅 Created {new Date(group.createdAt).toLocaleDateString()}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </>
-            )}
-        </div>
+      title.toLowerCase().includes(q) || desc.toLowerCase().includes(q)
     );
+  });
+
+  return (
+    <div className="page">
+      {/* Header */}
+      <div className="page-header">
+        <div className="page-title-block">
+          <div className="page-title">Project Dashboard</div>
+          <div className="page-subtitle">
+            Overview of all collaboration spaces, tasks, and members.
+          </div>
+        </div>
+        <div className="page-actions">
+          <button
+            type="button"
+            className="btn"
+            style={{ background: '#f3f4f6', color: '#111827' }}
+            onClick={() => navigateTo('CompleteProfile')}
+          >
+            ✏️ Edit Profile
+          </button>
+          <button
+            type="button"
+            className="btn"
+            style={{ background: '#fee2e2', color: '#b91c1c' }}
+            onClick={handleLogout}
+          >
+            Log Out
+          </button>
+        </div>
+      </div>
+
+      {/* Top stats + actions */}
+      <div className="card-grid">
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Active projects</div>
+              <div className="card-subtitle">
+                Spaces where students are collaborating.
+              </div>
+            </div>
+            <div className="badge">{totalProjects}</div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Total members</div>
+              <div className="card-subtitle">
+                Sum of members across all projects.
+              </div>
+            </div>
+            <div className="badge">{totalMembers}</div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Tasks tracked</div>
+              <div className="card-subtitle">
+                Combined tasks in every group.
+              </div>
+            </div>
+            <div className="badge">{totalTasks}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '12px',
+          marginTop: '18px',
+          marginBottom: '16px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigateTo('CreateGroup')}
+        >
+          + New Project
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ background: '#eff6ff', color: '#1d4ed8' }}
+          onClick={() => navigateTo('MatchScreen')}
+        >
+          🔍 Find Talent
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <input
+          type="text"
+          className="input-field"
+          placeholder="Search projects…"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            maxWidth: '260px',
+            marginBottom: 0,
+          }}
+        />
+      </div>
+
+      {/* Projects grid */}
+      <div className="card" style={{ marginTop: 4 }}>
+        <div className="card-header" style={{ marginBottom: 10 }}>
+          <div>
+            <div className="card-title">Projects</div>
+            <div className="card-subtitle">
+              Click a project to view details, chat, and tasks.
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <p
+            style={{
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+              marginTop: '24px',
+              marginBottom: '12px',
+            }}
+          >
+            Loading projects…
+          </p>
+        ) : filteredGroups.length === 0 ? (
+          <p
+            style={{
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              marginTop: '24px',
+              marginBottom: '12px',
+            }}
+          >
+            No active projects found. Start one today!
+          </p>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: '14px',
+              marginTop: '6px',
+            }}
+          >
+            {filteredGroups.map((group) => {
+              const memberItems = group?.members?.items || [];
+              const taskItems = group?.tasks?.items || [];
+              const openTasks = taskItems.filter(
+                (t) => t.status && t.status.toLowerCase() !== 'done'
+              ).length;
+
+              return (
+                <div
+                  key={group.id}
+                  className="card"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() =>
+                    navigateTo('GroupDetails', { groupId: group.id })
+                  }
+                >
+                  <div className="card-header" style={{ marginBottom: 6 }}>
+                    <div>
+                      <div
+                        className="card-title"
+                        style={{ marginBottom: 4 }}
+                      >
+                        {group.title}
+                      </div>
+                      <div className="card-subtitle">
+                        {group.description || 'No description provided.'}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '0.8rem',
+                      marginTop: 8,
+                    }}
+                  >
+                    <span className="text-muted">
+                      👥 {memberItems.length} member
+                      {memberItems.length === 1 ? '' : 's'}
+                    </span>
+                    <span className="text-muted">
+                      ✅ {taskItems.length} task
+                      {taskItems.length === 1 ? '' : 's'} ({openTasks} open)
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      borderTop: '1px solid var(--border-subtle)',
+                      marginTop: 10,
+                      paddingTop: 8,
+                      fontSize: '0.78rem',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    📅 Created{' '}
+                    {group.createdAt
+                      ? new Date(
+                          group.createdAt
+                        ).toLocaleDateString()
+                      : 'N/A'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default DashboardScreen;

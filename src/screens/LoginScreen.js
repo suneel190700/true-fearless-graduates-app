@@ -1,25 +1,26 @@
 // src/screens/LoginScreen.js
-
 import React, { useState } from 'react';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 
 function LoginScreen({ navigateTo }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
     if (!email || !password) {
       setError('Please enter email and password.');
       return;
     }
 
-    setError(null);
+    setError('');
     setLoading(true);
 
     try {
-      // 1) Check if there is already a signed-in user
+      // 1) Check if a user is already signed in
       try {
         const current = await getCurrentUser();
         const currentEmail =
@@ -27,20 +28,22 @@ function LoginScreen({ navigateTo }) {
 
         console.log('Existing session:', current);
 
-        // If already signed in with the same email, just go to Dashboard
-        if (currentEmail && currentEmail.toLowerCase() === email.toLowerCase()) {
+        if (
+          currentEmail &&
+          currentEmail.toLowerCase() === email.toLowerCase()
+        ) {
+          // Already logged in as this user → go straight to Dashboard
           navigateTo('Dashboard');
           return;
         }
-        // If signed in as someone else, we fall through and try signIn()
+        // If logged in as someone else, we fall through and call signIn below
       } catch (e) {
-        // No current user / not authenticated → normal login flow
+        // No existing session, continue to signIn
         console.log('No existing session, proceeding to signIn');
       }
 
-      // 2) Actually sign in (only if not already correctly signed in)
+      // 2) Actually sign in
       await signIn({ username: email, password });
-
       const currentAfter = await getCurrentUser();
       console.log('Logged in user:', currentAfter);
 
@@ -56,44 +59,57 @@ function LoginScreen({ navigateTo }) {
   return (
     <div className="form-container">
       <h2>Enterprise Login</h2>
+      <p className="text-muted" style={{ marginTop: -4, marginBottom: 16 }}>
+        Access your groups, tasks, and analytics dashboard.
+      </p>
 
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="input-field"
-      />
+      <form onSubmit={handleLogin}>
+        <label>Email</label>
+        <input
+          type="email"
+          className="input-field"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="input-field"
-      />
+        <label>Password</label>
+        <input
+          type="password"
+          className="input-field"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-      {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
+        {error && (
+          <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
+            {error}
+          </p>
+        )}
 
-      <button
-        onClick={handleLogin}
-        disabled={loading}
-        className="btn btn-primary"
-        style={{ width: '100%', marginTop: '10px' }}
-      >
-        {loading ? 'Logging in...' : 'LOG IN'}
-      </button>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          style={{ width: '100%', marginTop: 8 }}
+          disabled={loading}
+        >
+          {loading ? 'Logging in…' : 'Log In'}
+        </button>
+      </form>
 
-      <p style={{ marginTop: '20px', textAlign: 'center' }}>
+      <p style={{ marginTop: 18, fontSize: '0.9rem' }}>
         Don&apos;t have an account?{' '}
         <button
+          type="button"
           onClick={() => navigateTo('Signup')}
           style={{
             background: 'none',
             border: 'none',
-            color: 'var(--color-primary)',
+            color: 'var(--primary)',
             cursor: 'pointer',
             textDecoration: 'underline',
+            padding: 0,
           }}
         >
           Sign Up

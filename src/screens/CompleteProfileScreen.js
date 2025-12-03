@@ -1,5 +1,4 @@
 // src/screens/CompleteProfileScreen.js
-
 import React, { useState, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
@@ -48,13 +47,14 @@ function CompleteProfileScreen({ navigateTo }) {
   const [interests, setInterests] = useState('');
   const [availabilityHours, setAvailabilityHours] = useState('');
   const [file, setFile] = useState(null);
+
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [saveError, setSaveError] = useState('');
 
   const client = generateClient();
 
-  /* ================================
-     HELPERS
-  ================================= */
+  /* Helpers */
 
   const normalizeToString = (val) => {
     if (!val) return '';
@@ -78,36 +78,38 @@ function CompleteProfileScreen({ navigateTo }) {
     return null;
   };
 
-  /* ================================
-     LOAD USER PROFILE (BY id = userId)
-  ================================= */
+  /* Load existing profile */
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
+        setLoadError('');
         const { userId } = await getCurrentUser();
-        console.log('CompleteProfileScreen: current userId:', userId);
+        console.log('[CompleteProfile] current userId:', userId);
 
         const result = await client.graphql({
           query: getUserQuery,
           variables: { id: userId },
         });
 
-        console.log('CompleteProfileScreen: getUser result:', result);
+        console.log('[CompleteProfile] getUser result:', result);
 
-        const data = result?.data?.getUser;
-
-        if (data) {
-          setSkills(normalizeToString(data.skills));
-          setInterests(normalizeToString(data.interests));
-          setAvailabilityHours(data.availability_hours ?? '');
-        } else {
+        const user = result?.data?.getUser;
+        if (!user) {
           console.warn(
-            'CompleteProfileScreen: No User record found for this id. Did you createUser with id = userId at signup?'
+            '[CompleteProfile] No User record found for this id. Make sure createUser ran at signup.'
           );
+          return;
         }
+
+        setSkills(normalizeToString(user.skills));
+        setInterests(normalizeToString(user.interests));
+        setAvailabilityHours(
+          user.availability_hours != null ? String(user.availability_hours) : ''
+        );
       } catch (e) {
-        console.error('Error loading profile:', e);
+        console.error('[CompleteProfile] Error loading profile:', e);
+        setLoadError('Failed to load your profile. You can still try saving changes.');
       }
     };
 
@@ -115,29 +117,22 @@ function CompleteProfileScreen({ navigateTo }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ================================
-     FILE SELECT
-  ================================= */
-
   const handleFileChange = (e) => {
-    const selected = e.target.files[0];
+    const selected = e.target.files?.[0];
     if (selected) setFile(selected);
   };
 
-  /* ================================
-     SAVE PROFILE
-  ================================= */
-
-  const handleSave = async () => {
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaveError('');
     setLoading(true);
 
     try {
       const { userId } = await getCurrentUser();
-      console.log('CompleteProfileScreen: saving for userId:', userId);
+      console.log('[CompleteProfile] saving for userId:', userId);
 
       let profilePicPath = null;
 
-      // Upload image if selected
       if (file) {
         const path = `public/avatars/${userId}-${Date.now()}.png`;
         const uploadResult = await uploadData({
@@ -146,7 +141,7 @@ function CompleteProfileScreen({ navigateTo }) {
         }).result;
 
         profilePicPath = uploadResult.path;
-        console.log('CompleteProfileScreen: uploaded profile pic path:', profilePicPath);
+        console.log('[CompleteProfile] uploaded profile pic path:', profilePicPath);
       }
 
       const skillsArray = normalizeToArray(skills);
@@ -158,9 +153,9 @@ function CompleteProfileScreen({ navigateTo }) {
       if (interestsArray) input.interests = interestsArray;
 
       if (availabilityHours !== '') {
-        const hoursNum = parseInt(availabilityHours, 10);
-        if (!Number.isNaN(hoursNum)) {
-          input.availability_hours = hoursNum;
+        const parsed = parseInt(availabilityHours, 10);
+        if (!Number.isNaN(parsed)) {
+          input.availability_hours = parsed;
         }
       }
 
@@ -168,87 +163,125 @@ function CompleteProfileScreen({ navigateTo }) {
         input.profilePic = profilePicPath;
       }
 
-      console.log('CompleteProfileScreen: updateUser input:', input);
+      console.log('[CompleteProfile] updateUser input:', input);
 
       const updateResult = await client.graphql({
         query: updateUserMutation,
         variables: { input },
       });
 
-      console.log('CompleteProfileScreen: updateUser result:', updateResult);
+      console.log('[CompleteProfile] updateUser result:', updateResult);
 
       alert('Profile updated successfully!');
       navigateTo('Dashboard');
     } catch (e) {
-      console.error('SAVE ERROR →', JSON.stringify(e, null, 2));
-      alert(
-        'Failed to save: ' + (e?.errors?.[0]?.message || e.message)
-      );
+      console.error('[CompleteProfile] SAVE ERROR →', JSON.stringify(e, null, 2));
+      setSaveError(e?.errors?.[0]?.message || e.message || 'Failed to save changes.');
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================================
-     UI RENDER
-  ================================= */
-
   return (
-    <div className="form-container" style={{ maxWidth: '500px' }}>
-      <h2>Edit Profile</h2>
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ fontWeight: 'bold' }}>Profile Picture</label>
-        <input type="file" accept="image/*" onChange={handleFileChange} />
+    <div className="page">
+      <div className="page-header">
+        <div className="page-title-block">
+          <div className="page-title">Edit Profile</div>
+          <div className="page-subtitle">
+            Tell others what you’re good at and how much time you can contribute each week.
+          </div>
+        </div>
+        <div className="page-actions">
+          <button
+            type="button"
+            className="btn"
+            style={{ background: '#f3f4f6', color: '#111827' }}
+            onClick={() => navigateTo('Dashboard')}
+          >
+            ← Back to Dashboard
+          </button>
+        </div>
       </div>
 
-      <label>Skills (Comma separated)</label>
-      <input
-        type="text"
-        className="input-field"
-        value={skills}
-        onChange={(e) => setSkills(e.target.value)}
-        placeholder="React, Node"
-      />
+      <div className="card-grid">
+        <div className="card">
+          <div className="card-header" style={{ marginBottom: 10 }}>
+            <div>
+              <div className="card-title">Profile details</div>
+              <div className="card-subtitle">
+                Skills, interests, and availability help us match you to the right groups.
+              </div>
+            </div>
+          </div>
 
-      <label>Interests (Comma separated)</label>
-      <input
-        type="text"
-        className="input-field"
-        value={interests}
-        onChange={(e) => setInterests(e.target.value)}
-        placeholder="AI, Gaming"
-      />
+          {loadError && (
+            <p style={{ color: 'var(--danger)', fontSize: '0.85rem', marginBottom: 8 }}>
+              {loadError}
+            </p>
+          )}
 
-      <label>Weekly Availability (Hours)</label>
-      <input
-        type="number"
-        className="input-field"
-        value={availabilityHours}
-        onChange={(e) => setAvailabilityHours(e.target.value)}
-      />
+          <form onSubmit={handleSave}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontWeight: 500 }}>Profile picture</label>
+              <div style={{ marginTop: 6 }}>
+                <input type="file" accept="image/*" onChange={handleFileChange} />
+              </div>
+              <p className="text-muted" style={{ marginTop: 4 }}>
+                PNG or JPG, square works best.
+              </p>
+            </div>
 
-      <button
-        onClick={handleSave}
-        disabled={loading}
-        className="btn btn-primary"
-        style={{ width: '100%', marginTop: '15px' }}
-      >
-        {loading ? 'Saving...' : 'Save Profile'}
-      </button>
+            <label style={{ fontWeight: 500 }}>Skills</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="React, Node, Data Analysis"
+              value={skills}
+              onChange={(e) => setSkills(e.target.value)}
+            />
+            <p className="text-muted" style={{ marginTop: -12, marginBottom: 10 }}>
+              Separate multiple skills with commas.
+            </p>
 
-      <button
-        onClick={() => navigateTo('Dashboard')}
-        className="btn"
-        style={{
-          width: '100%',
-          marginTop: '10px',
-          background: '#eee',
-          color: 'black',
-        }}
-      >
-        Cancel
-      </button>
+            <label style={{ fontWeight: 500 }}>Interests</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="AI, Hackathons, Open Source"
+              value={interests}
+              onChange={(e) => setInterests(e.target.value)}
+            />
+            <p className="text-muted" style={{ marginTop: -12, marginBottom: 10 }}>
+              What topics excite you? Use commas to add multiple.
+            </p>
+
+            <label style={{ fontWeight: 500 }}>Weekly availability (hours)</label>
+            <input
+              type="number"
+              className="input-field"
+              placeholder="e.g. 5"
+              value={availabilityHours}
+              onChange={(e) => setAvailabilityHours(e.target.value)}
+              min="0"
+            />
+
+            {saveError && (
+              <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
+                {saveError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: 10 }}
+              disabled={loading}
+            >
+              {loading ? 'Saving…' : 'Save Profile'}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }

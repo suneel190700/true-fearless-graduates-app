@@ -1,8 +1,14 @@
+// src/screens/SignupScreen.js
 import React, { useState } from 'react';
-import { signUp, confirmSignUp, signIn, getCurrentUser } from 'aws-amplify/auth';
+import {
+  signUp,
+  confirmSignUp,
+  signIn,
+  getCurrentUser,
+} from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 
-// GraphQL Mutation to create a user in DynamoDB
+// Create User row in DynamoDB
 const createUserMutation = `
   mutation CreateUser($input: CreateUserInput!) {
     createUser(input: $input) {
@@ -15,28 +21,29 @@ const createUserMutation = `
 `;
 
 function SignupScreen({ navigateTo }) {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
+
   const [verificationCode, setVerificationCode] = useState('');
-  const [step, setStep] = useState(1); // 1 = signup, 2 = verify
-  const [error, setError] = useState(null);
+  const [step, setStep] = useState(1); // 1 = signup form, 2 = verify
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const client = generateClient();
 
-  // STEP 1: Register in Cognito
   const handleSignup = async () => {
-    if (!email || !password || !fullName) {
+    if (!fullName || !email || !password) {
       setError('Please fill in all fields.');
       return;
     }
 
-    setError(null);
+    setError('');
     setLoading(true);
 
     try {
-      const { userId } = await signUp({
+      const result = await signUp({
         username: email,
         password,
         options: {
@@ -47,7 +54,7 @@ function SignupScreen({ navigateTo }) {
         },
       });
 
-      console.log('Signup success, Cognito userId:', userId);
+      console.log('Signup success:', result);
       setStep(2);
     } catch (e) {
       console.error('Signup error:', e);
@@ -57,36 +64,36 @@ function SignupScreen({ navigateTo }) {
     }
   };
 
-  // STEP 2: Confirm code, then create User row with id = Cognito userId
   const handleVerification = async () => {
     if (!verificationCode) {
-      setError('Please enter the code from your email.');
+      setError('Please enter the verification code.');
       return;
     }
 
-    setError(null);
+    setError('');
     setLoading(true);
 
     try {
-      // A. Confirm user in Cognito
+      // A. Confirm sign up in Cognito
       await confirmSignUp({
         username: email,
         confirmationCode: verificationCode,
       });
 
-      // B. Sign in so we can call getCurrentUser and get userId
+      // B. Sign in so we can obtain userId (Cognito sub)
       await signIn({ username: email, password });
+      const current = await getCurrentUser();
+      const userId = current?.userId;
 
-      const { userId } = await getCurrentUser();
-      console.log('Confirmed + signed in. Cognito userId:', userId);
+      console.log('Verified & signed in. userId:', userId);
 
-      // C. Create User in DynamoDB with id = userId
+      // C. Create User profile in DynamoDB with id = userId
       await client.graphql({
         query: createUserMutation,
         variables: {
           input: {
-            id: userId,      // 👈 KEY: DynamoDB PK matches Cognito userId
-            email: email,
+            id: userId,
+            email,
             full_name: fullName,
             role: 'student',
           },
@@ -103,83 +110,104 @@ function SignupScreen({ navigateTo }) {
     }
   };
 
+  const onSubmit = (e) => {
+    e.preventDefault();
+    if (step === 1) {
+      handleSignup();
+    } else {
+      handleVerification();
+    }
+  };
+
   return (
     <div className="form-container">
       <h2>{step === 1 ? 'Create Enterprise Account' : 'Verify Your Email'}</h2>
 
-      {step === 1 && (
-        <>
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="input-field"
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input-field"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="input-field"
-          />
-        </>
-      )}
+      <p className="text-muted" style={{ marginTop: -4, marginBottom: 12 }}>
+        {step === 1
+          ? 'Join your learning community and manage groups, tasks, and analytics in one place.'
+          : `We sent a verification code to ${email}. Enter it below to activate your account.`}
+      </p>
 
-      {step === 2 && (
-        <>
-          <p style={{ textAlign: 'center', fontSize: '0.9em' }}>
-            We sent a code to <strong>{email}</strong>.
+      <form onSubmit={onSubmit}>
+        {step === 1 && (
+          <>
+            <label>Full Name</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="e.g. Suneel Kalva"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+
+            <label>Email</label>
+            <input
+              type="email"
+              className="input-field"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <label>Password</label>
+            <input
+              type="password"
+              className="input-field"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <label>Verification Code</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Enter the 6-digit code"
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value)}
+            />
+          </>
+        )}
+
+        {error && (
+          <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
+            {error}
           </p>
-          <input
-            type="text"
-            placeholder="Verification Code"
-            value={verificationCode}
-            onChange={(e) => setVerificationCode(e.target.value)}
-            className="input-field"
-          />
-        </>
-      )}
+        )}
 
-      {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
-
-      {step === 1 ? (
         <button
-          onClick={handleSignup}
-          disabled={loading}
+          type="submit"
           className="btn btn-primary"
-          style={{ width: '100%', marginTop: '10px' }}
-        >
-          {loading ? 'Registering...' : 'Sign Up'}
-        </button>
-      ) : (
-        <button
-          onClick={handleVerification}
+          style={{ width: '100%', marginTop: 8 }}
           disabled={loading}
-          className="btn btn-primary"
-          style={{ width: '100%', marginTop: '10px' }}
         >
-          {loading ? 'Verifying...' : 'Confirm Account'}
+          {loading
+            ? step === 1
+              ? 'Creating account…'
+              : 'Verifying…'
+            : step === 1
+            ? 'Sign Up'
+            : 'Confirm Account'}
         </button>
-      )}
+      </form>
 
-      <p style={{ marginTop: '20px', textAlign: 'center' }}>
+      <p style={{ marginTop: 18, fontSize: '0.9rem' }}>
         Already have an account?{' '}
         <button
+          type="button"
           onClick={() => navigateTo('Login')}
           style={{
             background: 'none',
             border: 'none',
-            color: 'var(--color-primary)',
+            color: 'var(--primary)',
             cursor: 'pointer',
             textDecoration: 'underline',
+            padding: 0,
           }}
         >
           Log In
