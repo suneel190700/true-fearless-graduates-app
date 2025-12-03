@@ -1,3 +1,5 @@
+// src/screens/CompleteProfileScreen.js
+
 import React, { useState, useEffect } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
@@ -18,9 +20,6 @@ const getUserQuery = `
       interests
       availability_hours
       profilePic
-      createdAt
-      updatedAt
-      __typename
     }
   }
 `;
@@ -36,9 +35,6 @@ const updateUserMutation = `
       interests
       availability_hours
       profilePic
-      createdAt
-      updatedAt
-      __typename
     }
   }
 `;
@@ -55,6 +51,10 @@ function CompleteProfileScreen({ navigateTo }) {
   const [loading, setLoading] = useState(false);
 
   const client = generateClient();
+
+  /* ================================
+     HELPERS
+  ================================= */
 
   const normalizeToString = (val) => {
     if (!val) return '';
@@ -74,54 +74,79 @@ function CompleteProfileScreen({ navigateTo }) {
         .filter(Boolean);
       return arr.length ? arr : null;
     }
+
     return null;
   };
 
-  const loadProfile = async () => {
-    try {
-      const { userId } = await getCurrentUser();
-
-      const result = await client.graphql({
-        query: getUserQuery,
-        variables: { id: userId },
-      });
-
-      const data = result.data.getUser;
-
-      if (data) {
-        setSkills(normalizeToString(data.skills));
-        setInterests(normalizeToString(data.interests));
-        setAvailabilityHours(data.availability_hours || '');
-      }
-    } catch (e) {
-      console.error('Error loading profile:', e);
-    }
-  };
+  /* ================================
+     LOAD USER PROFILE (BY id = userId)
+  ================================= */
 
   useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const { userId } = await getCurrentUser();
+        console.log('CompleteProfileScreen: current userId:', userId);
+
+        const result = await client.graphql({
+          query: getUserQuery,
+          variables: { id: userId },
+        });
+
+        console.log('CompleteProfileScreen: getUser result:', result);
+
+        const data = result?.data?.getUser;
+
+        if (data) {
+          setSkills(normalizeToString(data.skills));
+          setInterests(normalizeToString(data.interests));
+          setAvailabilityHours(data.availability_hours ?? '');
+        } else {
+          console.warn(
+            'CompleteProfileScreen: No User record found for this id. Did you createUser with id = userId at signup?'
+          );
+        }
+      } catch (e) {
+        console.error('Error loading profile:', e);
+      }
+    };
+
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ================================
+     FILE SELECT
+  ================================= */
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected) setFile(selected);
   };
 
+  /* ================================
+     SAVE PROFILE
+  ================================= */
+
   const handleSave = async () => {
     setLoading(true);
 
     try {
       const { userId } = await getCurrentUser();
+      console.log('CompleteProfileScreen: saving for userId:', userId);
+
       let profilePicPath = null;
 
+      // Upload image if selected
       if (file) {
         const path = `public/avatars/${userId}-${Date.now()}.png`;
-        const result = await uploadData({
+        const uploadResult = await uploadData({
           path,
           data: file,
         }).result;
 
-        profilePicPath = result.path;
+        profilePicPath = uploadResult.path;
+        console.log('CompleteProfileScreen: uploaded profile pic path:', profilePicPath);
       }
 
       const skillsArray = normalizeToArray(skills);
@@ -133,17 +158,24 @@ function CompleteProfileScreen({ navigateTo }) {
       if (interestsArray) input.interests = interestsArray;
 
       if (availabilityHours !== '') {
-        input.availability_hours = Number(availabilityHours);
+        const hoursNum = parseInt(availabilityHours, 10);
+        if (!Number.isNaN(hoursNum)) {
+          input.availability_hours = hoursNum;
+        }
       }
 
       if (profilePicPath) {
         input.profilePic = profilePicPath;
       }
 
-      await client.graphql({
+      console.log('CompleteProfileScreen: updateUser input:', input);
+
+      const updateResult = await client.graphql({
         query: updateUserMutation,
         variables: { input },
       });
+
+      console.log('CompleteProfileScreen: updateUser result:', updateResult);
 
       alert('Profile updated successfully!');
       navigateTo('Dashboard');
@@ -156,6 +188,10 @@ function CompleteProfileScreen({ navigateTo }) {
       setLoading(false);
     }
   };
+
+  /* ================================
+     UI RENDER
+  ================================= */
 
   return (
     <div className="form-container" style={{ maxWidth: '500px' }}>

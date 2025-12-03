@@ -19,15 +19,13 @@ function SignupScreen({ navigateTo }) {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-
-  // step: 1 = signup form, 2 = verify code
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // 1 = signup, 2 = verify
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const client = generateClient();
 
-  // STEP 1: Register user in Cognito
+  // STEP 1: Register in Cognito
   const handleSignup = async () => {
     if (!email || !password || !fullName) {
       setError('Please fill in all fields.');
@@ -49,7 +47,7 @@ function SignupScreen({ navigateTo }) {
         },
       });
 
-      console.log('Signup success, user ID (Cognito):', userId);
+      console.log('Signup success, Cognito userId:', userId);
       setStep(2);
     } catch (e) {
       console.error('Signup error:', e);
@@ -59,7 +57,7 @@ function SignupScreen({ navigateTo }) {
     }
   };
 
-  // STEP 2: Confirm email, then create User row in DynamoDB **with id = Cognito userId**
+  // STEP 2: Confirm code, then create User row with id = Cognito userId
   const handleVerification = async () => {
     if (!verificationCode) {
       setError('Please enter the code from your email.');
@@ -70,27 +68,24 @@ function SignupScreen({ navigateTo }) {
     setLoading(true);
 
     try {
-      // A. Confirm with Cognito
+      // A. Confirm user in Cognito
       await confirmSignUp({
         username: email,
         confirmationCode: verificationCode,
       });
 
-      // B. Sign the user in so we can get userId (Cognito sub)
-      await signIn({
-        username: email,
-        password,
-      });
+      // B. Sign in so we can call getCurrentUser and get userId
+      await signIn({ username: email, password });
 
-      const { userId } = await getCurrentUser(); // 👈 this is the ID we will use as DynamoDB PK
+      const { userId } = await getCurrentUser();
       console.log('Confirmed + signed in. Cognito userId:', userId);
 
-      // C. Create User profile row in DynamoDB, with id = userId
+      // C. Create User in DynamoDB with id = userId
       await client.graphql({
         query: createUserMutation,
         variables: {
           input: {
-            id: userId,         // 👈 KEY POINT
+            id: userId,      // 👈 KEY: DynamoDB PK matches Cognito userId
             email: email,
             full_name: fullName,
             role: 'student',
@@ -176,7 +171,7 @@ function SignupScreen({ navigateTo }) {
       )}
 
       <p style={{ marginTop: '20px', textAlign: 'center' }}>
-        Already have an account?
+        Already have an account?{' '}
         <button
           onClick={() => navigateTo('Login')}
           style={{
