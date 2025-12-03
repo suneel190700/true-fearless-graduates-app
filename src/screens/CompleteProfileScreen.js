@@ -7,9 +7,30 @@ import { uploadData } from 'aws-amplify/storage';
    QUERIES & MUTATIONS
 ================================ */
 
-const getUserQuery = `
-  query GetUser($id: ID!) {
-    getUser(id: $id) {
+// Find user by email (NOT by id)
+const findUserByEmailQuery = `
+  query ListUsersByEmail($email: String!) {
+    listUsers(filter: { email: { eq: $email } }) {
+      items {
+        id
+        email
+        full_name
+        role
+        skills
+        interests
+        availability_hours
+        profilePic
+        createdAt
+        updatedAt
+        __typename
+      }
+    }
+  }
+`;
+
+const createUserMutation = `
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) {
       id
       email
       full_name
@@ -54,6 +75,10 @@ function CompleteProfileScreen({ navigateTo }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // This is the REAL User table id in DynamoDB
+  const [userDbId, setUserDbId] = useState(null);
+  const [userEmail, setUserEmail] = useState('');
+
   const client = generateClient();
 
   /* ================================
@@ -82,24 +107,38 @@ function CompleteProfileScreen({ navigateTo }) {
   };
 
   /* ================================
-     LOAD USER PROFILE
+     LOAD USER PROFILE (BY EMAIL)
   ================================= */
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const { userId } = await getCurrentUser();
+        const current = await getCurrentUser();
+
+        // In your logs: username is the email
+        const email =
+          current?.signInDetails?.loginId || current?.username;
+
+        setUserEmail(email);
+
+        // Look up User row by email
         const result = await client.graphql({
-          query: getUserQuery,
-          variables: { id: userId },
+          query: findUserByEmailQuery,
+          variables: { email },
         });
 
-        const data = result.data.getUser;
+        const items = result.data?.listUsers?.items || [];
 
-        if (data) {
-          setSkills(normalizeToString(data.skills));
-          setInterests(normalizeToString(data.interests));
-          setAvailabilityHours(data.availability_hours || '');
+        if (items.length > 0) {
+          const user = items[0];
+          setUserDbId(user.id);
+
+          setSkills(normalizeToString(user.skills));
+          setInterests(normalizeToString(user.interests));
+          setAvailabilityHours(user.availability_hours || '');
+        } else {
+          // No user row yet in DynamoDB; fields stay empty
+          console.log('No User record yet for email:', email);
         }
       } catch (e) {
         console.error('Error loading profile:', e);
@@ -126,12 +165,16 @@ function CompleteProfileScreen({ navigateTo }) {
     setLoading(true);
 
     try {
-      const { userId } = await getCurrentUser();
-      let profilePicPath = null;
+      // This is the logged-in Cognito user, but we ONLY care about the email here
+      const current = await getCurrentUser();
+      const email =
+        current?.signInDetails?.loginId || current?.username;
+      if (!userEmail) setUserEmail(email);
 
       // Upload image if selected
+      let profilePicPath = null;
       if (file) {
-        const path = `public/avatars/${userId}-${Date.now()}.png`;
+        const path = `public/avatars/${email}-${Date.now()}.png`;
         const result = await uploadData({
           path,
           data: file,
@@ -140,34 +183,59 @@ function CompleteProfileScreen({ navigateTo }) {
         profilePicPath = result.path;
       }
 
-      // Prepare safe update input
       const skillsArray = normalizeToArray(skills);
       const interestsArray = normalizeToArray(interests);
 
-      const input = { id: userId };
+      // If we already know the userDbId → updateUser
+      if (userDbId) {
+        const input = { id: userDbId };
 
-      if (skillsArray) input.skills = skillsArray;
-      if (interestsArray) input.interests = interestsArray;
+        if (skillsArray) input.skills = skillsArray;
+        if (interestsArray) input.interests = interestsArray;
+        if (availabilityHours !== '') {
+          input.availability_hours = Number(availabilityHours);
+        }
+        if (profilePicPath) input.profilePic = profilePicPath;
 
-      if (availabilityHours !== '') {
-        input.availability_hours = Number(availabilityHours);
+        await client.graphql({
+          query: updateUserMutation,
+          variables: { input },
+        });
+      } else {
+        // No User row yet → create one, then effectively "upsert"
+        const createInput = {
+          email,
+          // Optional fields
+          full_name: null,
+          role: 'student',
+        };
+
+        // Put profile fields into create as well
+        if (skillsArray) createInput.skills = skillsArray;
+        if (interestsArray) createInput.interests = interestsArray;
+        if (availabilityHours !== '') {
+          createInput.availability_hours = Number(availabilityHours);
+        }
+        if (profilePicPath) createInput.profilePic = profilePicPath;
+
+        const createResult = await client.graphql({
+          query: createUserMutation,
+          variables: { input: createInput },
+        });
+
+        const created = createResult.data?.createUser;
+        if (created?.id) {
+          setUserDbId(created.id);
+        }
       }
-
-      if (profilePicPath) {
-        input.profilePic = profilePicPath;
-      }
-
-      await client.graphql({
-        query: updateUserMutation,
-        variables: { input },
-      });
 
       alert('Profile updated successfully!');
       navigateTo('Dashboard');
     } catch (e) {
       console.error('SAVE ERROR →', JSON.stringify(e, null, 2));
       alert(
-        'Failed to save: ' + (e?.errors?.[0]?.message || e.message)
+        'Failed to save: ' +
+          (e?.errors?.[0]?.message || e.message)
       );
     } finally {
       setLoading(false);
