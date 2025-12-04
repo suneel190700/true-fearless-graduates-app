@@ -1,60 +1,49 @@
-// src/screens/GroupChatScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import { generateClient } from 'aws-amplify/api';
 import { getCurrentUser } from 'aws-amplify/auth';
+import { uploadData, getUrl } from 'aws-amplify/storage';
 
-/* ================================
-   QUERIES & MUTATIONS
-================================ */
-
-// Fetch all messages filtered by groupID
 const listMessagesQuery = `
   query ListMessages($filter: ModelMessageFilterInput) {
-    listMessages(filter: $filter) {
+    listMessages(filter: $filter, limit: 500) {
       items {
         id
         content
+        attachmentUrl
+        fileName
+        fileType
+        groupID
         userID
-        createdAt
         user {
+          id
           full_name
           email
         }
+        createdAt
       }
     }
   }
 `;
 
-// Create a new message
 const createMessageMutation = `
   mutation CreateMessage($input: CreateMessageInput!) {
     createMessage(input: $input) {
       id
-      content
-      userID
-      createdAt
-      user {
-        full_name
-        email
-      }
     }
   }
 `;
 
-function GroupChatScreen({ navigateTo, route }) {
-  const groupId = route?.params?.groupId;
-  const groupTitle = route?.params?.title || 'Group Chat';
+function GroupChatScreen({ route }) {
+  const groupId = route.params?.groupId;
+  const groupTitle = route.params?.title || 'Group chat';
 
   const [messages, setMessages] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
-
   const [newMessage, setNewMessage] = useState('');
+  const [file, setFile] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-
-  // Key used to detect "@you"
-  const [mentionKey, setMentionKey] = useState('');
 
   const client = generateClient();
   const messagesEndRef = useRef(null);
@@ -65,104 +54,112 @@ function GroupChatScreen({ navigateTo, route }) {
     }
   };
 
-  useEffect(scrollToBottom, [messages]);
+  const fetchMessages = async () => {
+    if (!groupId) return;
+    try {
+      setError('');
+      const result = await client.graphql({
+        query: listMessagesQuery,
+        variables: { filter: { groupID: { eq: groupId } } },
+      });
+      let items = result?.data?.listMessages?.items || [];
+      items = items
+        .filter(Boolean)
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      setMessages(items);
+    } catch (e) {
+      console.error('[GroupChat] Error fetching messages:', e);
+      setError('Failed to load messages.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Load current user + messages on mount
   useEffect(() => {
+    let interval;
     const init = async () => {
       try {
         const user = await getCurrentUser();
-        console.log('[GroupChat] currentUser:', user);
         setCurrentUser(user);
-
-        // Build mentionKey from email or username: "@suneel.kalva19"
-        const email =
-          user?.signInDetails?.loginId ||
-          user?.username ||
-          '';
-        const atIndex = email.indexOf('@');
-        if (atIndex > 0) {
-          const handle = email.slice(0, atIndex);
-          setMentionKey(`@${handle}`);
-        }
-
-        await fetchMessages();
       } catch (e) {
         console.error('[GroupChat] Auth error:', e);
-        setError('You must be logged in to use chat.');
       } finally {
-        setLoading(false);
+        await fetchMessages();
+        // simple polling every 5 seconds
+        interval = setInterval(fetchMessages, 5000);
       }
     };
 
     init();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
 
-  const fetchMessages = async () => {
-    if (!groupId) return;
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
-    try {
-      const result = await client.graphql({
-        query: listMessagesQuery,
-        variables: {
-          filter: {
-            groupID: { eq: groupId },
-          },
-        },
-      });
-
-      const items = result?.data?.listMessages?.items || [];
-      items.sort((a, b) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return aTime - bTime;
-      });
-
-      console.log('[GroupChat] fetched messages:', items);
-      setMessages(items);
-    } catch (e) {
-      console.error('[GroupChat] Error loading messages:', e);
-      setError('Failed to load messages.');
-    }
+  const handleFileChange = (e) => {
+    const selected = e.target.files && e.target.files[0];
+    setFile(selected || null);
   };
 
-  const handleSend = async () => {
-    if (!newMessage.trim() || !currentUser?.userId || !groupId) return;
+  const sendMessage = async () => {
+    if (!currentUser) {
+      alert('You must be logged in to send messages.');
+      return;
+    }
 
-    setSending(true);
-    setError('');
+    const trimmed = newMessage.trim();
+    if (!trimmed && !file) return; // nothing to send
 
     try {
-      const content = newMessage.trim();
+      setSending(true);
+      setError('');
 
-      const result = await client.graphql({
+      let attachmentKey = null;
+      let fileName = null;
+      let fileType = null;
+
+      if (file) {
+        const key = `group-files/${groupId}/${Date.now()}-${file.name}`;
+        await uploadData({
+          path: key,
+          data: file,
+        }).result;
+
+        attachmentKey = key;
+        fileName = file.name;
+        fileType = file.type || 'application/octet-stream';
+      }
+
+      await client.graphql({
         query: createMessageMutation,
         variables: {
           input: {
-            content,
+            content: trimmed || (file ? '(file attached)' : ''),
+            attachmentUrl: attachmentKey,
+            fileName,
+            fileType,
             groupID: groupId,
             userID: currentUser.userId,
           },
         },
       });
 
-      const created = result?.data?.createMessage;
-      console.log('[GroupChat] created message:', created);
-
-      setMessages((prev) => {
-        const next = [...prev, created].sort((a, b) => {
-          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return aTime - bTime;
-        });
-        return next;
-      });
-
       setNewMessage('');
+      setFile(null);
+      await fetchMessages();
     } catch (e) {
       console.error('[GroupChat] Error sending message:', e);
-      setError(e?.errors?.[0]?.message || e.message || 'Failed to send message.');
+      setError('Failed to send message.');
+      alert('Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
@@ -171,39 +168,130 @@ function GroupChatScreen({ navigateTo, route }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      sendMessage();
     }
   };
 
-  // 🔍 Highlight @mentions in message text
-  const renderMessageContent = (text) => {
-    if (!text) return null;
+  const handleOpenAttachment = async (message) => {
+    if (!message.attachmentUrl) return;
+    try {
+      const result = await getUrl({
+        path: message.attachmentUrl,
+        options: { expiresIn: 3600 }, // 1 hour
+      });
+      const url = result?.url?.toString();
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        alert('Could not get file URL.');
+      }
+    } catch (e) {
+      console.error('[GroupChat] Error opening attachment:', e);
+      alert('Could not open file. Please try again.');
+    }
+  };
 
-    // Split by tokens that start with "@"
-    const parts = text.split(/(\@[^\s]+)/g);
+  const renderMessage = (msg) => {
+    const isMe = currentUser && msg.userID === currentUser.userId;
+    const authorName = isMe
+      ? 'You'
+      : msg.user?.full_name || msg.user?.email || 'Member';
 
-    return parts.map((part, idx) => {
-      if (part.startsWith('@')) {
-        const isMeMention =
-          mentionKey &&
-          part.toLowerCase() === mentionKey.toLowerCase();
+    const timeStr = msg.createdAt
+      ? new Date(msg.createdAt).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
 
-        return (
-          <span
-            key={idx}
+    return (
+      <div
+        key={msg.id}
+        style={{
+          display: 'flex',
+          justifyContent: isMe ? 'flex-end' : 'flex-start',
+          marginBottom: 8,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '70%',
+            background: isMe ? '#2563eb' : '#ffffff',
+            color: isMe ? '#ffffff' : '#111827',
+            borderRadius: 14,
+            padding: '8px 10px',
+            boxShadow: '0 4px 10px rgba(15,23,42,0.08)',
+          }}
+        >
+          <div
             style={{
-              fontWeight: 600,
-              color: isMeMention ? '#b91c1c' : '#1d4ed8',
-              backgroundColor: isMeMention ? '#fef2f2' : 'transparent',
+              fontSize: '0.75rem',
+              opacity: 0.8,
+              marginBottom: 2,
             }}
           >
-            {part}
-          </span>
-        );
-      }
+            {authorName}
+          </div>
 
-      return <span key={idx}>{part}</span>;
-    });
+          {msg.content && (
+            <div
+              style={{
+                fontSize: '0.85rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {msg.content}
+            </div>
+          )}
+
+          {msg.fileName && (
+            <button
+              type="button"
+              onClick={() => handleOpenAttachment(msg)}
+              style={{
+                marginTop: 6,
+                borderRadius: 999,
+                border: 'none',
+                padding: '4px 8px',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                background: isMe ? '#1d4ed8' : '#eff6ff',
+                color: isMe ? '#e5e7eb' : '#1d4ed8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span>📎</span>
+              <span
+                style={{
+                  maxWidth: 160,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {msg.fileName}
+              </span>
+            </button>
+          )}
+
+          {timeStr && (
+            <div
+              style={{
+                fontSize: '0.7rem',
+                marginTop: 4,
+                textAlign: 'right',
+                opacity: 0.7,
+              }}
+            >
+              {timeStr}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -211,37 +299,30 @@ function GroupChatScreen({ navigateTo, route }) {
       {/* Header */}
       <div className="page-header">
         <div className="page-title-block">
-          <div className="page-title">Chat · {groupTitle}</div>
+          <div className="page-title">{groupTitle}</div>
           <div className="page-subtitle">
-            Real-time conversation space for this group. Use
-            {' '}
-            <strong>@handle</strong>
-            {' '}
-            to mention someone.
+            Group chat &amp; file sharing for this project.
           </div>
-        </div>
-        <div className="page-actions">
-          <button
-            type="button"
-            className="btn"
-            style={{ background: '#f3f4f6', color: '#111827' }}
-            onClick={() => navigateTo('GroupDetails', { groupId })}
-          >
-            ← Back to Group
-          </button>
         </div>
       </div>
 
-      {/* Chat card */}
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '68vh' }}>
+      <div
+        className="card"
+        style={{
+          height: '70vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {/* Messages area */}
         <div
           style={{
             flex: 1,
             overflowY: 'auto',
-            paddingRight: 4,
-            paddingBottom: 8,
-            borderBottom: '1px solid var(--border-subtle)',
+            padding: '10px 12px',
+            borderRadius: 12,
+            background: '#f9fafb',
+            marginBottom: 10,
           }}
         >
           {loading ? (
@@ -249,7 +330,7 @@ function GroupChatScreen({ navigateTo, route }) {
               style={{
                 textAlign: 'center',
                 color: 'var(--text-muted)',
-                marginTop: '20px',
+                marginTop: 18,
               }}
             >
               Loading messages…
@@ -259,128 +340,77 @@ function GroupChatScreen({ navigateTo, route }) {
               style={{
                 textAlign: 'center',
                 color: 'var(--text-muted)',
-                marginTop: '20px',
+                marginTop: 18,
               }}
             >
-              No messages yet. Start the conversation!
+              No messages yet. Say hi and share your first file!
             </p>
           ) : (
-            messages.map((msg) => {
-              const isMe = msg.userID === currentUser?.userId;
-              const senderName =
-                msg.user?.full_name ||
-                msg.user?.email ||
-                (isMe ? 'You' : 'Member');
-              const timestamp = msg.createdAt
-                ? new Date(msg.createdAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : '';
-
-              return (
-                <div
-                  key={msg.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: isMe ? 'flex-end' : 'flex-start',
-                    marginTop: 8,
-                  }}
-                >
-                  <div
-                    style={{
-                      maxWidth: '70%',
-                      padding: '6px 10px',
-                      borderRadius: 12,
-                      background: isMe ? 'var(--primary)' : '#f3f4f6',
-                      color: isMe ? '#ffffff' : '#111827',
-                      boxShadow: '0 6px 18px rgba(15,23,42,0.12)',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        marginBottom: 2,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: '0.75rem',
-                          opacity: 0.9,
-                        }}
-                      >
-                        {senderName}
-                      </span>
-                      {timestamp && (
-                        <span
-                          style={{
-                            fontSize: '0.7rem',
-                            opacity: 0.7,
-                          }}
-                        >
-                          {timestamp}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>
-                      {renderMessageContent(msg.content)}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+            messages.map((m) => renderMessage(m))
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Error message */}
+        {/* Error */}
         {error && (
-          <p
+          <div
             style={{
               color: 'var(--danger)',
               fontSize: '0.8rem',
-              marginTop: 6,
-              marginBottom: 4,
+              marginBottom: 6,
             }}
           >
             {error}
-          </p>
+          </div>
         )}
 
-        {/* Input area */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            marginTop: 8,
-            alignItems: 'flex-end',
-          }}
-        >
-          <textarea
-            className="input-field"
-            style={{
-              marginBottom: 0,
-              minHeight: 40,
-              maxHeight: 80,
-              resize: 'none',
-              flex: 1,
-            }}
-            placeholder="Type a message… (use @handle to mention someone)"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleSend}
-            disabled={sending || !newMessage.trim()}
-          >
-            {sending ? 'Sending…' : 'Send'}
-          </button>
+        {/* File + input row */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              style={{ fontSize: '0.8rem' }}
+            />
+            {file && (
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--text-muted)',
+                  maxWidth: 220,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Selected: {file.name}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <textarea
+              className="input-field"
+              placeholder="Type a message (Enter to send, Shift+Enter for new line)…"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{
+                flex: 1,
+                resize: 'none',
+                minHeight: 40,
+                maxHeight: 100,
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={sendMessage}
+              disabled={sending}
+            >
+              {sending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
