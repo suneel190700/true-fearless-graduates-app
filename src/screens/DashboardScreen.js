@@ -84,15 +84,7 @@ function DashboardScreen({ navigateTo }) {
     }
   };
 
-  const filteredGroups = groups.filter((g) => {
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    const title = (g.title || '').toLowerCase();
-    const desc = (g.description || '').toLowerCase();
-    const tags = (g.tags || []).join(' ').toLowerCase();
-    return title.includes(q) || desc.includes(q) || tags.includes(q);
-  });
-
+  // Role of current user in a given group
   const getUserRoleInGroup = (group) => {
     if (!currentUser) return null;
     const userId = currentUser.userId;
@@ -123,6 +115,20 @@ function DashboardScreen({ navigateTo }) {
       border: '1px solid #e5e7eb',
     };
   };
+
+  // Text search
+  const filteredGroups = groups.filter((g) => {
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    const title = (g.title || '').toLowerCase();
+    const desc = (g.description || '').toLowerCase();
+    const tags = (g.tags || []).join(' ').toLowerCase();
+    return title.includes(q) || desc.includes(q) || tags.includes(q);
+  });
+
+  // Only groups where the user is owner or member
+  const userGroups = groups.filter((g) => !!getUserRoleInGroup(g));
+  const filteredUserGroups = filteredGroups.filter((g) => !!getUserRoleInGroup(g));
 
   const userEmail =
     currentUser?.signInDetails?.loginId || currentUser?.username || '';
@@ -172,8 +178,8 @@ function DashboardScreen({ navigateTo }) {
             <div>
               <div className="card-title">Your projects</div>
               <div className="card-subtitle">
-                You&apos;re currently in {groups.length} group
-                {groups.length === 1 ? '' : 's'}.
+                You&apos;re currently in {userGroups.length} group
+                {userGroups.length === 1 ? '' : 's'}.
               </div>
             </div>
           </div>
@@ -278,7 +284,7 @@ function DashboardScreen({ navigateTo }) {
           >
             Loading projects…
           </p>
-        ) : filteredGroups.length === 0 ? (
+        ) : filteredUserGroups.length === 0 ? (
           <p
             style={{
               textAlign: 'center',
@@ -286,8 +292,7 @@ function DashboardScreen({ navigateTo }) {
               marginTop: 18,
             }}
           >
-            No projects match your search yet. Try clearing the search box or
-            create a new project.
+            You&apos;re not in any groups yet. Try creating a project or joining one.
           </p>
         ) : (
           <div
@@ -297,7 +302,7 @@ function DashboardScreen({ navigateTo }) {
               gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
             }}
           >
-            {filteredGroups.map((group) => {
+            {filteredUserGroups.map((group) => {
               const role = getUserRoleInGroup(group);
               const tags = group.tags || [];
               const createdDate = group.createdAt
