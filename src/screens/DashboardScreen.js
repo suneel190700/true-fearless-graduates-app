@@ -116,7 +116,7 @@ function DashboardScreen({ navigateTo }) {
     };
   };
 
-  // Text search
+  // All groups filtered by search
   const filteredGroups = groups.filter((g) => {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
@@ -126,7 +126,7 @@ function DashboardScreen({ navigateTo }) {
     return title.includes(q) || desc.includes(q) || tags.includes(q);
   });
 
-  // Only groups where the user is owner or member
+  // Groups where the user is owner or member
   const userGroups = groups.filter((g) => !!getUserRoleInGroup(g));
   const filteredUserGroups = filteredGroups.filter((g) => !!getUserRoleInGroup(g));
 
@@ -140,7 +140,7 @@ function DashboardScreen({ navigateTo }) {
         <div className="page-title-block">
           <div className="page-title">Dashboard</div>
           <div className="page-subtitle">
-            Overview of your collaboration projects, groups, and teammates.
+            Overview of collaboration projects, groups, and teammates.
           </div>
         </div>
         <div className="page-actions">
@@ -171,15 +171,16 @@ function DashboardScreen({ navigateTo }) {
         </div>
       </div>
 
-      {/* Info / quick actions */}
+      {/* Summary / quick actions */}
       <div className="card-grid" style={{ marginBottom: 12 }}>
+        {/* All projects summary */}
         <div className="card">
           <div className="card-header">
             <div>
-              <div className="card-title">Your projects</div>
+              <div className="card-title">All projects</div>
               <div className="card-subtitle">
-                You&apos;re currently in {userGroups.length} group
-                {userGroups.length === 1 ? '' : 's'}.
+                There are {groups.length} active project
+                {groups.length === 1 ? '' : 's'} in this workspace.
               </div>
             </div>
           </div>
@@ -187,13 +188,36 @@ function DashboardScreen({ navigateTo }) {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => navigateTo('CreateGroup')}
+              onClick={() => {/* list is already below, so no nav */}}
             >
-              + Create new project
+              Browse projects
             </button>
           </div>
         </div>
 
+        {/* Your groups summary */}
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Your groups</div>
+              <div className="card-subtitle">
+                You&apos;re currently in {userGroups.length} group
+                {userGroups.length === 1 ? '' : 's'} as owner or member.
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {/* user groups list is further down */}}
+            >
+              View your groups
+            </button>
+          </div>
+        </div>
+
+        {/* Matching */}
         <div className="card">
           <div className="card-header">
             <div>
@@ -214,12 +238,13 @@ function DashboardScreen({ navigateTo }) {
           </div>
         </div>
 
+        {/* Analytics */}
         <div className="card">
           <div className="card-header">
             <div>
               <div className="card-title">Analytics</div>
               <div className="card-subtitle">
-                See activity and engagement across your projects.
+                See activity and engagement across projects.
               </div>
             </div>
           </div>
@@ -263,13 +288,13 @@ function DashboardScreen({ navigateTo }) {
         <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
       )}
 
-      {/* Groups list */}
+      {/* ALL PROJECTS CARD */}
       <div className="card">
         <div className="card-header" style={{ marginBottom: 8 }}>
           <div>
-            <div className="card-title">Your groups</div>
+            <div className="card-title">All projects</div>
             <div className="card-subtitle">
-              Click into a group to view details, chat, and manage tasks.
+              Browse every collaboration space. Your role is highlighted on each card.
             </div>
           </div>
         </div>
@@ -284,7 +309,7 @@ function DashboardScreen({ navigateTo }) {
           >
             Loading projects…
           </p>
-        ) : filteredUserGroups.length === 0 ? (
+        ) : filteredGroups.length === 0 ? (
           <p
             style={{
               textAlign: 'center',
@@ -292,7 +317,8 @@ function DashboardScreen({ navigateTo }) {
               marginTop: 18,
             }}
           >
-            You&apos;re not in any groups yet. Try creating a project or joining one.
+            No projects match your search yet. Try clearing the search box or
+            create a new project.
           </p>
         ) : (
           <div
@@ -302,7 +328,7 @@ function DashboardScreen({ navigateTo }) {
               gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
             }}
           >
-            {filteredUserGroups.map((group) => {
+            {filteredGroups.map((group) => {
               const role = getUserRoleInGroup(group);
               const tags = group.tags || [];
               const createdDate = group.createdAt
@@ -394,6 +420,213 @@ function DashboardScreen({ navigateTo }) {
                   )}
 
                   {/* Footer actions */}
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '0.8rem',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      {createdDate && <>Created {createdDate}</>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          fontSize: '0.8rem',
+                        }}
+                        onClick={() =>
+                          navigateTo('GroupDetails', {
+                            groupId: group.id,
+                            title: group.title,
+                          })
+                        }
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          background: '#f3f4f6',
+                          fontSize: '0.8rem',
+                        }}
+                        onClick={() =>
+                          navigateTo('GroupChat', {
+                            groupId: group.id,
+                            title: group.title,
+                          })
+                        }
+                      >
+                        Chat
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          background: '#0ea5e9',
+                          color: '#ffffff',
+                          fontSize: '0.8rem',
+                        }}
+                        onClick={() =>
+                          navigateTo('GroupTasks', {
+                            groupId: group.id,
+                            title: group.title,
+                          })
+                        }
+                      >
+                        Tasks
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* YOUR GROUPS CARD */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-header" style={{ marginBottom: 8 }}>
+          <div>
+            <div className="card-title">Your groups</div>
+            <div className="card-subtitle">
+              Spaces where you&apos;re an owner or member.
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <p
+            style={{
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              marginTop: 18,
+            }}
+          >
+            Loading your groups…
+          </p>
+        ) : filteredUserGroups.length === 0 ? (
+          <p
+            style={{
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              marginTop: 18,
+            }}
+          >
+            You&apos;re not in any groups yet. Try joining or creating a project.
+          </p>
+        ) : (
+          <div
+            className="card-grid"
+            style={{
+              marginTop: 6,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            }}
+          >
+            {filteredUserGroups.map((group) => {
+              const role = getUserRoleInGroup(group);
+              const tags = group.tags || [];
+              const createdDate = group.createdAt
+                ? new Date(group.createdAt).toLocaleDateString()
+                : '';
+
+              return (
+                <div
+                  key={`my-${group.id}`}
+                  className="card"
+                  style={{
+                    borderLeft: '4px solid var(--primary)',
+                    boxShadow: '0 10px 25px rgba(15,23,42,0.06)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '1rem',
+                          marginBottom: 2,
+                        }}
+                      >
+                        {group.title || 'Untitled group'}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        {group.description
+                          ? group.description.length > 90
+                            ? group.description.slice(0, 90) + '…'
+                            : group.description
+                          : 'No description yet.'}
+                      </div>
+                    </div>
+                    {role && (
+                      <span
+                        style={{
+                          alignSelf: 'flex-start',
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          fontSize: '0.75rem',
+                          textTransform: 'capitalize',
+                          ...roleBadgeStyle(role),
+                        }}
+                      >
+                        {role}
+                      </span>
+                    )}
+                  </div>
+
+                  {tags.length > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                        marginTop: 6,
+                      }}
+                    >
+                      {tags.map((t, idx) => (
+                        <span
+                          key={`my-${group.id}-${t}-${idx}`}
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            fontSize: '0.75rem',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #dbeafe',
+                          }}
+                        >
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   <div
                     style={{
                       marginTop: 10,
