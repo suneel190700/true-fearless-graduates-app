@@ -26,6 +26,48 @@ const listGroupsQuery = `
   }
 `;
 
+// Get current user's profile
+const getUserQuery = `
+  query GetUser($id: ID!) {
+    getUser(id: $id) {
+      id
+      full_name
+      email
+      role
+      skills
+      interests
+      availability_hours
+      profilePic
+    }
+  }
+`;
+
+// Same completeness logic as CompleteProfile
+function computeProfileCompleteness({ skills, interests, availabilityHours, profilePic }) {
+  let total = 4;
+  let score = 0;
+
+  const hasSkills = Array.isArray(skills)
+    ? skills.length > 0
+    : typeof skills === 'string' && skills.trim().length > 0;
+
+  const hasInterests = Array.isArray(interests)
+    ? interests.length > 0
+    : typeof interests === 'string' && interests.trim().length > 0;
+
+  const hoursNum = parseInt(availabilityHours, 10);
+  const hasAvailability = !isNaN(hoursNum) && hoursNum > 0;
+
+  const hasPic = !!profilePic;
+
+  if (hasSkills) score++;
+  if (hasInterests) score++;
+  if (hasAvailability) score++;
+  if (hasPic) score++;
+
+  return Math.round((score / total) * 100);
+}
+
 function DashboardScreen({ navigateTo }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,23 +77,10 @@ function DashboardScreen({ navigateTo }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [authError, setAuthError] = useState('');
 
-  const client = generateClient();
+  const [profile, setProfile] = useState(null);
+  const [profileError, setProfileError] = useState('');
 
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const user = await getCurrentUser();
-        setCurrentUser(user);
-      } catch (e) {
-        console.error('[Dashboard] Auth error:', e);
-        setAuthError('Could not load current user.');
-      } finally {
-        fetchGroups();
-      }
-    };
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const client = generateClient();
 
   const fetchGroups = async () => {
     setLoading(true);
@@ -73,6 +102,43 @@ function DashboardScreen({ navigateTo }) {
       setLoading(false);
     }
   };
+
+  const fetchProfile = async (userId) => {
+    try {
+      setProfileError('');
+      const res = await client.graphql({
+        query: getUserQuery,
+        variables: { id: userId },
+      });
+      const user = res?.data?.getUser;
+      setProfile(user || null);
+      if (!user) {
+        setProfileError('Profile not found. Update your profile to improve matching.');
+      }
+    } catch (e) {
+      console.error('[Dashboard] Error fetching profile:', e);
+      setProfileError('Failed to load your profile.');
+    }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const user = await getCurrentUser();
+        setCurrentUser(user);
+        if (user?.userId) {
+          await fetchProfile(user.userId);
+        }
+      } catch (e) {
+        console.error('[Dashboard] Auth error:', e);
+        setAuthError('Could not load current user.');
+      } finally {
+        fetchGroups();
+      }
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -133,6 +199,33 @@ function DashboardScreen({ navigateTo }) {
   const userEmail =
     currentUser?.signInDetails?.loginId || currentUser?.username || '';
 
+  // Profile completeness
+  let completion = null;
+  let completionLabel = '';
+  if (profile) {
+    completion = computeProfileCompleteness({
+      skills: profile.skills,
+      interests: profile.interests,
+      availabilityHours: profile.availability_hours,
+      profilePic: profile.profilePic,
+    });
+
+    if (completion < 50) {
+      completionLabel = 'Let’s get the basics in place.';
+    } else if (completion < 100) {
+      completionLabel = 'Looking good! A few more details to reach 100%.';
+    } else {
+      completionLabel = 'Nice! Your profile is complete and match-ready.';
+    }
+  }
+
+  const displayName =
+    profile?.full_name ||
+    userEmail?.split('@')[0] ||
+    'Student';
+
+  const displayRole = profile?.role || 'Student';
+
   return (
     <div className="page">
       {/* Header */}
@@ -171,53 +264,149 @@ function DashboardScreen({ navigateTo }) {
         </div>
       </div>
 
-      {/* Summary / quick actions */}
+      {/* Mini profile widget */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          {/* Avatar circle */}
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #2563eb, #9333ea)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: '1.1rem',
+              flexShrink: 0,
+            }}
+          >
+            {displayName
+              .split(' ')
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((p) => p[0]?.toUpperCase())
+              .join('')}
+          </div>
+
+          {/* Text + completeness */}
+          <div style={{ flexGrow: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                  }}
+                >
+                  {displayName}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-muted)',
+                    marginTop: 2,
+                  }}
+                >
+                  {displayRole}
+                  {userEmail && ` · ${userEmail}`}
+                </div>
+                {profileError && (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: '0.8rem',
+                      color: 'var(--danger)',
+                    }}
+                  >
+                    {profileError}
+                  </div>
+                )}
+              </div>
+
+              {completion !== null && (
+                <div style={{ minWidth: 220, maxWidth: 320 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 4,
+                      fontSize: '0.8rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span>Profile completeness</span>
+                    <span>{completion}%</span>
+                  </div>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: 7,
+                      borderRadius: 999,
+                      background: '#e5e7eb',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${completion}%`,
+                        height: '100%',
+                        background:
+                          completion === 100
+                            ? '#16a34a'
+                            : 'var(--primary, #2563eb)',
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: '0.75rem',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {completionLabel}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn"
+            onClick={() => navigateTo('CompleteProfile')}
+            style={{
+              fontSize: '0.8rem',
+              padding: '6px 12px',
+            }}
+          >
+            Update profile
+          </button>
+        </div>
+      </div>
+
+      {/* Quick actions (only Matching + Analytics to avoid duplicates) */}
       <div className="card-grid" style={{ marginBottom: 12 }}>
-        {/* All projects summary */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">All projects</div>
-              <div className="card-subtitle">
-                There are {groups.length} active project
-                {groups.length === 1 ? '' : 's'} in this workspace.
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {/* list is already below, so no nav */}}
-            >
-              Browse projects
-            </button>
-          </div>
-        </div>
-
-        {/* Your groups summary */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">Your groups</div>
-              <div className="card-subtitle">
-                You&apos;re currently in {userGroups.length} group
-                {userGroups.length === 1 ? '' : 's'} as owner or member.
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {/* user groups list is further down */}}
-            >
-              View your groups
-            </button>
-          </div>
-        </div>
-
-        {/* Matching */}
+        {/* Smart Matching */}
         <div className="card">
           <div className="card-header">
             <div>
@@ -330,6 +519,7 @@ function DashboardScreen({ navigateTo }) {
           >
             {filteredGroups.map((group) => {
               const role = getUserRoleInGroup(group);
+              const isMember = !!role;
               const tags = group.tags || [];
               const createdDate = group.createdAt
                 ? new Date(group.createdAt).toLocaleDateString()
@@ -437,8 +627,20 @@ function DashboardScreen({ navigateTo }) {
                       }}
                     >
                       {createdDate && <>Created {createdDate}</>}
+                      {!isMember && (
+                        <div
+                          style={{
+                            fontSize: '0.75rem',
+                            color: 'var(--text-muted)',
+                            marginTop: 2,
+                          }}
+                        >
+                          You&apos;re not a member of this group.
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
+                      {/* Everyone can VIEW */}
                       <button
                         type="button"
                         className="btn"
@@ -456,39 +658,45 @@ function DashboardScreen({ navigateTo }) {
                       >
                         View
                       </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{
-                          background: '#f3f4f6',
-                          fontSize: '0.8rem',
-                        }}
-                        onClick={() =>
-                          navigateTo('GroupChat', {
-                            groupId: group.id,
-                            title: group.title,
-                          })
-                        }
-                      >
-                        Chat
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{
-                          background: '#0ea5e9',
-                          color: '#ffffff',
-                          fontSize: '0.8rem',
-                        }}
-                        onClick={() =>
-                          navigateTo('GroupTasks', {
-                            groupId: group.id,
-                            title: group.title,
-                          })
-                        }
-                      >
-                        Tasks
-                      </button>
+
+                      {/* Only members/owners see Chat + Tasks */}
+                      {isMember && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              background: '#f3f4f6',
+                              fontSize: '0.8rem',
+                            }}
+                            onClick={() =>
+                              navigateTo('GroupChat', {
+                                groupId: group.id,
+                                title: group.title,
+                              })
+                            }
+                          >
+                            Chat
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              background: '#0ea5e9',
+                              color: '#ffffff',
+                              fontSize: '0.8rem',
+                            }}
+                            onClick={() =>
+                              navigateTo('GroupTasks', {
+                                groupId: group.id,
+                                title: group.title,
+                              })
+                            }
+                          >
+                            Tasks
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
