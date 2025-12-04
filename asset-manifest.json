@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/true-fearless-graduates-app/static/css/main.2ffde6ff.css",
-    "main.js": "/true-fearless-graduates-app/static/js/main.140b8426.js",
-    "static/js/453.84af0319.chunk.js": "/true-fearless-graduates-app/static/js/453.84af0319.chunk.js",
-    "index.html": "/true-fearless-graduates-app/index.html",
-    "main.2ffde6ff.css.map": "/true-fearless-graduates-app/static/css/main.2ffde6ff.css.map",
-    "main.140b8426.js.map": "/true-fearless-graduates-app/static/js/main.140b8426.js.map",
-    "453.84af0319.chunk.js.map": "/true-fearless-graduates-app/static/js/453.84af0319.chunk.js.map"
+    "main.css": "/static/css/main.a9130062.css",
+    "main.js": "/static/js/main.9f5ba2c2.js",
+    "static/js/453.84af0319.chunk.js": "/static/js/453.84af0319.chunk.js",
+    "index.html": "/index.html",
+    "main.a9130062.css.map": "/static/css/main.a9130062.css.map",
+    "main.9f5ba2c2.js.map": "/static/js/main.9f5ba2c2.js.map",
+    "453.84af0319.chunk.js.map": "/static/js/453.84af0319.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.2ffde6ff.css",
-    "static/js/main.140b8426.js"
+    "static/css/main.a9130062.css",
+    "static/js/main.9f5ba2c2.js"
   ]
 }
