@@ -128,13 +128,16 @@ function GroupChatScreen({ route }) {
       let fileType = null;
 
       if (file) {
-        const key = `group-files/${groupId}/${Date.now()}-${file.name}`;
+        // relative key we store in DynamoDB
+        const baseKey = `group-files/${groupId}/${Date.now()}-${file.name}`;
+
+        // upload under protected/<identityId>/... so it matches Amplify S3 policy
         await uploadData({
-          path: key,
           data: file,
+          path: ({ identityId }) => `protected/${identityId}/${baseKey}`,
         }).result;
 
-        attachmentKey = key;
+        attachmentKey = baseKey; // store only relative key
         fileName = file.name;
         fileType = file.type || 'application/octet-stream';
       }
@@ -144,7 +147,7 @@ function GroupChatScreen({ route }) {
         variables: {
           input: {
             content: trimmed || (file ? '(file attached)' : ''),
-            attachmentUrl: attachmentKey,
+            attachmentUrl: attachmentKey, // note: this is the base key
             fileName,
             fileType,
             groupID: groupId,
@@ -174,11 +177,16 @@ function GroupChatScreen({ route }) {
 
   const handleOpenAttachment = async (message) => {
     if (!message.attachmentUrl) return;
+
     try {
+      // message.attachmentUrl is the base key we stored (group-files/...)
+      const baseKey = message.attachmentUrl;
+
       const result = await getUrl({
-        path: message.attachmentUrl,
+        path: ({ identityId }) => `protected/${identityId}/${baseKey}`,
         options: { expiresIn: 3600 }, // 1 hour
       });
+
       const url = result?.url?.toString();
       if (url) {
         window.open(url, '_blank', 'noopener,noreferrer');
